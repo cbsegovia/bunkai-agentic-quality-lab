@@ -5,12 +5,12 @@
   "perComponentCommit": {
     "skills": "06947fa1e0e334db64660502d83620ec11b6210a",
     "commands": "ff1a319d1a04a0a7ff08a4a8775dce5d52f4818a",
-    "scripts": "06947fa1e0e334db64660502d83620ec11b6210a",
-    "docs": "06947fa1e0e334db64660502d83620ec11b6210a",
-    "cli": "92478af0100187cddace8618a427a7e3b4860b90",
+    "scripts": "c9b7577f38677b4b339e545aa73c0525ceef7b4c",
+    "docs": "c9b7577f38677b4b339e545aa73c0525ceef7b4c",
+    "cli": "c9b7577f38677b4b339e545aa73c0525ceef7b4c",
     "vscode": "b08266ac907637e6d74539d0f396481336dcf113",
     "husky": "b71a4a624498a6bb99201f72b6ae6342b4542e8b",
-    "agents-docs": "ff1a319d1a04a0a7ff08a4a8775dce5d52f4818a",
+    "agents-docs": "c9b7577f38677b4b339e545aa73c0525ceef7b4c",
     "claude-config": "ff1a319d1a04a0a7ff08a4a8775dce5d52f4818a",
     "tooling": "01c0a2f669c592a2bb26b5abc8d112b6eda5da40",
     "env-template": "06947fa1e0e334db64660502d83620ec11b6210a",
@@ -38,7 +38,7 @@
       ]
     },
     ".gitignore": {
-      "lastSyncedSha": "a293ad9759098669d09ad4106f2e96acb2c11187",
+      "lastSyncedSha": "82195b81ce755d511e8da13bbd672adae0959232",
       "appendedLines": [
         "**/evidence/",
         ".template/claude-md.upstream.sha",
@@ -66,7 +66,8 @@
         ".agents/skills/resend-cli/",
         "!skills-lock.json",
         "!**/skills-lock.json",
-        ".backups*/"
+        ".backups*/",
+        ".template/last-apply.json"
       ]
     }
   },
@@ -103,7 +104,7 @@
       }
     }
   },
-  "cliVersion": "7.0",
-  "lastSyncedAt": "2026-09-02T12:12:48.963Z",
+  "cliVersion": "8.4",
+  "lastSyncedAt": "2026-09-06T14:57:05.986Z",
   "variableSystemVersion": 1
 }

@@ -181,3 +181,6 @@ dbhub.local.toml
 
 # ----- 2026-09-02 (sync) -----
 .backups*/
+
+# ----- 2026-09-06 (sync) -----
+.template/last-apply.json
