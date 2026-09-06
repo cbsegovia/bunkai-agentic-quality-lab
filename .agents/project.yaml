@@ -36,6 +36,10 @@ git_strategy:
     direct_push_to_protected: allowed
     admin_bypass: true
     require_pr_reviews: 1
+  meta:
+    # v8.4 parity field: this strategy was confirmed via git-flow-master Strategy Setup on
+    # 2026-08-24 (see comment above), not left at the shipped default — hence `chosen`.
+    strategy_source: chosen
 
 backend:
   backend_repo: ../upex-bunkai-tms # Relative path to backend repository (e.g. ../my-backend)
