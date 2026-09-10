@@ -43,6 +43,9 @@ export default antfu({
     // MCP reference templates — syntax-sensitive opt-in configs. Linting them
     // (e.g. toml/array-bracket-newline) corrupts the layout users copy from.
     'docs/mcp/**',
+    // Pre-migration backup snapshot the boilerplate updater writes before an
+    // in-place harness migration — a frozen copy of old source, not live code.
+    '.template/pre-agents-migration/**',
   ],
 
   // Custom rules
