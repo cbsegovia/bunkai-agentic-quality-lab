@@ -3,22 +3,25 @@
   "templateRepo": "upex-galaxy/agentic-qa-boilerplate",
   "templateCommit": "",
   "perComponentCommit": {
-    "skills": "78597763963061453470eebd872be393157f2adc",
-    "commands": "78597763963061453470eebd872be393157f2adc",
-    "scripts": "78597763963061453470eebd872be393157f2adc",
-    "docs": "78597763963061453470eebd872be393157f2adc",
+    "skills": "35f296d05ac55452b0db924f34ec37643393d2c9",
+    "commands": "35f296d05ac55452b0db924f34ec37643393d2c9",
+    "scripts": "35f296d05ac55452b0db924f34ec37643393d2c9",
+    "docs": "35f296d05ac55452b0db924f34ec37643393d2c9",
     "cli": "92478af0100187cddace8618a427a7e3b4860b90",
     "vscode": "b08266ac907637e6d74539d0f396481336dcf113",
     "husky": "b08266ac907637e6d74539d0f396481336dcf113",
-    "agents-docs": "1ea2f055afee2518ef5e771d6a872752be73011c",
+    "agents-docs": "35f296d05ac55452b0db924f34ec37643393d2c9",
     "claude-config": "01c0a2f669c592a2bb26b5abc8d112b6eda5da40",
     "tooling": "01c0a2f669c592a2bb26b5abc8d112b6eda5da40",
-    "env-template": "78597763963061453470eebd872be393157f2adc"
+    "env-template": "35f296d05ac55452b0db924f34ec37643393d2c9",
+    "agent-compatibility": "35f296d05ac55452b0db924f34ec37643393d2c9",
+    "codex-config": "35f296d05ac55452b0db924f34ec37643393d2c9",
+    "agent-root-config": "35f296d05ac55452b0db924f34ec37643393d2c9"
   },
   "syncedComponents": [],
   "ignoreFileSync": {
     ".prettierignore": {
-      "lastSyncedSha": "5976ac77f0a92296eca72803773618c7d317227e",
+      "lastSyncedSha": "2d65bedc55be87885be51510bc1b977c8aef67c2",
       "appendedLines": [
         "api/openapi*",
         "api/.openapi-config.json",
@@ -28,38 +31,79 @@
         "packages/decks/",
         "scripts/contribution-audit/out/",
         "scripts/contribution-audit/roster.local.json",
-        "scripts/contribution-audit/report_template.html"
+        "scripts/contribution-audit/report_template.html",
+        ".backups*/",
+        ".scratch/",
+        ".session/"
       ]
     },
     ".gitignore": {
-      "lastSyncedSha": "36a1a683d89bb8c2c9376a25ec204cbbdfd4c5a4",
+      "lastSyncedSha": "82195b81ce755d511e8da13bbd672adae0959232",
       "appendedLines": [
         "**/evidence/",
         ".template/claude-md.upstream.sha",
         "/.allure/",
         "/.agents/prompts/",
-        ".template/upstream-sha/"
+        ".template/upstream-sha/",
+        ".context/reports/*",
+        "!.context/reports/README.md",
+        ".env*",
+        "!.env.example",
+        ".claude/worktrees/",
+        ".backups*/",
+        ".template/last-apply.json",
+        ".context/PBI/*",
+        "!.context/PBI/README.md",
+        "!.context/PBI/templates/",
+        "!.context/PBI/epics/",
+        ".context/PBI/epics/*",
+        "!.context/PBI/epics/*/",
+        ".context/PBI/epics/*/*",
+        "!.context/PBI/epics/*/test-specs/",
+        ".agents/skills/*-workspace/",
+        ".agents/skills/playwright-cli/",
+        ".agents/skills/playwright-best-practices/",
+        ".agents/skills/resend-cli/",
+        "!skills-lock.json",
+        "!**/skills-lock.json"
       ]
     }
   },
   "packageJsonSync": {
     "package.json": {
       "scripts": {
-        "lastSyncedSha": "a5f848544f56080ceff9a25cade06ccd4b05a35d",
+        "lastSyncedSha": "477cbad473d1d9f96311a8edb9d9d8463b621c50",
         "appliedKeys": [
           "vars:env:check",
-          "env"
+          "env",
+          "agents:compat",
+          "agents:compat:check",
+          "codex",
+          "context:hydrate",
+          "git:policy",
+          "jira:components",
+          "jira:url",
+          "skills:evals",
+          "tests:map"
         ]
       },
       "devDependencies": {
-        "lastSyncedSha": "a5f848544f56080ceff9a25cade06ccd4b05a35d",
+        "lastSyncedSha": "477cbad473d1d9f96311a8edb9d9d8463b621c50",
         "appliedKeys": [
           "allure-js-commons"
         ]
+      },
+      "dependencies": {
+        "lastSyncedSha": "477cbad473d1d9f96311a8edb9d9d8463b621c50",
+        "appliedKeys": []
+      },
+      "lint-staged": {
+        "lastSyncedSha": "477cbad473d1d9f96311a8edb9d9d8463b621c50",
+        "appliedKeys": []
       }
     }
   },
-  "cliVersion": "7.0",
-  "lastSyncedAt": "2026-08-03T15:32:24.192Z",
+  "cliVersion": "8.4",
+  "lastSyncedAt": "2026-09-16T15:11:38.904Z",
   "variableSystemVersion": 1
 }

@@ -34,26 +34,43 @@ This repository is not a traditional test suite. It is an **agentic quality engi
 
 The skills are written in the open SKILL format and are compatible with Claude Code, Copilot, Cursor, Codex, and OpenCode runtimes — Claude Code is the reference implementation used throughout this document.
 
-The practice is organised around a **pipeline of stages** that takes a Story from pre-sprint AC refinement all the way to a data-driven release decision. Stage 0 runs PRE-SPRINT on a batch of backlog Stories; Stages 1-6 run IN-SPRINT per ticket:
+The practice is organised around a **pipeline of named stages** that takes a Story from pre-sprint AC refinement all the way to a data-driven release decision, and then back around. Stages are named by word, never by number — the numbering used to collide with the IQL step numbering and with the legacy TMLC prose, so it now survives in exactly one place, the mapping table in `agentic-qa-core/references/stage-gates.md`. Shift-Left runs PRE-SPRINT on a batch of backlog Stories; Planning through Reporting run IN-SPRINT per ticket; Documentation, Automation and Regression run POST-SPRINT; Observation runs in PRODUCTION and feeds the next Shift-Left pass:
 
 ```
-                          ┌──── PRE-SPRINT ────┐  ┌──────────────────────── IN-SPRINT ──────────────────────────┐
-ONBOARDING (one-time)  →  STAGE 0           →  SESSION START  →  STAGE 1   →  STAGE 2   →  STAGE 3   →  STAGE 4    →  STAGE 5   →  STAGE 6
-  (project-discovery)     (Shift-Left QA)      (Context)         (Planning)   (Execution)  (Reporting)  (Documentation) (Automation) (Regression)
+                        ┌─── PRE-SPRINT ───┐  ┌────────────── IN-SPRINT ──────────────┐  ┌────────── POST-SPRINT ──────────┐  ┌ PRODUCTION ┐
+ONBOARDING (one-time) →   SHIFT-LEFT        →  SESSION START → PLANNING → EXECUTION → REPORTING → DOCUMENTATION → AUTOMATION → REGRESSION →  OBSERVATION
+  (project-discovery)     (shift-left-       (Context)        (sprint-    (sprint-    (sprint-    (test-           (test-        (regression-  (agentic
+                           testing)                            testing)    testing)    testing)    documentation)   automation)   testing)      routine)
+                               ▲                                                                                                                    │
+                               └──────────────────────── the loop: production signal reopens analysis ──────────────────────────────────────────────┘
 ```
 
 | Stage | Owning skill | Output |
 | ----- | ------------ | ------ |
-| **Onboarding** (one-time) | `project-discovery` (discovery) + `/adapt-framework` (KATA adaptation) | `CLAUDE.md`, `.context/` artifacts, and KATA wired to the target stack |
-| **0 — Shift-Left QA** (pre-sprint, batch) | `shift-left-testing` | Refined ACs + gap-spotting + ATP DRAFT outlines per Story, label `shift-left-reviewed`, Story transitioned `backlog → shift_left_qa → estimation` for PO/Dev to estimate |
-| **1 — Planning** (in-sprint) | `sprint-testing` | ATP + TCs linked to ACs (short-circuits Phases 1-3 when the Story carries a fresh `shift-left-reviewed` label) |
-| **2 — Execution** | `sprint-testing` | Smoke + trifuerza (UI/API/DB) exploration, evidence captured |
-| **3 — Reporting** | `sprint-testing` | ATR, bug tickets, QA comment on the source ticket |
-| **4 — Documentation** | `test-documentation` | TMS artefacts with ROI verdict (Candidate / Manual / Deferred) |
-| **5 — Automation** | `test-automation` | KATA Playwright tests, `@atc` decorated and traceable |
-| **6 — Regression** | `regression-testing` | CI pass-rate, failure classification, GO / CAUTION / NO-GO verdict |
+| **Onboarding** (one-time) | `project-discovery` (discovery) + `/adapt-framework` (KATA adaptation) | `AGENTS.md`, `.context/` artifacts, and KATA wired to the target stack |
+| **Shift-Left** (pre-sprint, batch) | `shift-left-testing` | Refined ACs + gap-spotting + pre-sprint ATP (outline maturity, authored into the `{{jira.acceptance_test_plan}}` field — the Test Plan item is created later, in Planning) per Story, label `shift-left-reviewed`, Story transitioned `backlog → shift_left_qa → estimation` for PO/Dev to estimate |
+| **Planning** (in-sprint) | `sprint-testing` | ATP + TCs linked to ACs (short-circuits Phases 1-3 when the Story carries a fresh `shift-left-reviewed` label) |
+| **Execution** | `sprint-testing` | Smoke + trifuerza (UI/API/DB) exploration, evidence captured |
+| **Reporting** | `sprint-testing` | ATR, bug tickets, QA comment on the source ticket |
+| **Documentation** | `test-documentation` | TMS artefacts with ROI verdict (Candidate / Manual / Deferred); every Candidate promoted into the project's **Regression Test Plan (RTP)** with the `regression-candidate` label |
+| **Automation** | `test-automation` | KATA Playwright tests, `@atc` decorated and traceable |
+| **Regression** | `regression-testing` | CI pass-rate, failure classification, GO / CAUTION / NO-GO verdict — the STR derives its test list from the RTP membership, and leaves the RTP itself open |
+| **Observation** (production) | *none yet — the operating unit is an **agentic routine**, capability L4* | Production signals (SLO burn, error budget, RUM, canary) turned into backlog items that reopen the next Shift-Left pass |
 
-Every stage is powered by an AI skill, every skill operates with a human-in-the-loop checkpoint, and every artefact produced is traceable from the original user story to the CI regression run that validates the release.
+**Observation is declared, not implemented.** Nothing under `.agents/skills/` executes it today, and it deliberately carries no Definition-of-Done checklist — an empty checklist reads as an implemented gate. It is named here because a pipeline that stops at Regression describes a release, not a lifecycle: without it the loop above is a straight line, and the method's own claim to extend past the release has no owner.
+
+Every implemented stage is powered by an AI skill, every skill operates with a human-in-the-loop checkpoint, and every artefact produced is traceable from the original user story to the CI regression run that validates the release. Each stage also carries an **agentic contract** — what the agent does, what the person signs, what evidence must survive, the autonomy level on a 0-5 scale, and whether a separate verifier is required. The contract table lives with the gates, in `agentic-qa-core/references/stage-gates.md`.
+
+### Execution profiles: manual and agentic
+
+The method does not change when the executor changes. The same stages, the same gates, the same artefacts, the same evidence — what moves is **who performs the mechanical work**.
+
+| Profile | Who executes | Who decides | What is identical |
+| ------- | ------------ | ----------- | ----------------- |
+| **manual** | a QA engineer, by hand | the same QA engineer | the stage sequence, the DoD checklists, the artefact ladder (ATP → ATR → TC), the traceability links, the GO/NO-GO evidence bar |
+| **agentic** | an AI skill under the orchestration model of §9 | a human at every stage checkpoint, per the contract's signature column | *(same as above — nothing in the method is agent-only)* |
+
+This is the practical consequence: a team that adopts the practice without any AI still runs the identical lifecycle, because the gates are written against observable artefacts and not against who produced them. An agent that cannot satisfy a gate is not permitted to skip it on the grounds of being an agent, and a human who skips it has skipped the same gate. The agentic profile buys speed and consistency on the mechanical half; it buys nothing on the deciding half, which is why the autonomy ceiling in the contract table is 3 and never 5.
 
 This document walks through the full system — the problem it solves, the strategy behind it, the architecture that supports it, and the engineering rigor applied to each layer.
 
@@ -131,16 +148,21 @@ The rest of this document describes how that strategy is implemented in code and
 | **Token**             | The unit an AI model reads and writes. Tokens have direct cost and occupy context window space.                              |
 | **Context Window**    | The memory available within a single conversation. Everything the AI can "see" right now.                                    |
 | **MCP**               | Model Context Protocol. A standard that lets AI tools talk to live systems — database, browser, API, TMS.                    |
-| **Skill**             | A reusable AI capability, stored under `.claude/skills/<name>/`. Auto-triggers when the user's intent matches its description. |
-| **Command**           | A one-shot utility stored under `.claude/commands/<name>.md`. Invoked explicitly with `/<name>`. No auto-triggering.          |
+| **Skill**             | A reusable AI capability, stored under `.agents/skills/<name>/` and shared by every supported harness. Auto-triggers when the user's intent matches its description. |
+| **Command**           | A generated transport alias (`.claude/commands/<name>.md`, `.opencode/commands/<name>.md`) that forwards `/<name>` to a skill + mode. Holds no workflow of its own. No auto-triggering. |
 | **Subagent**          | A specialist worker dispatched by a skill for a focused task (planning, execution, reporting, verification).                 |
 | **Persistent Memory** | Facts that survive across conversations — user preferences, project rules, team decisions.                                   |
-| **ATP**               | Acceptance Test Plan. The risk triage and scenario design produced in Stage 1 (Planning).                                    |
-| **ATR**               | Acceptance Test Results. The report filed in Stage 3 (Reporting).                                                            |
+| **ATP**               | Acceptance Test Plan. The risk triage and scenario design; authored pre-sprint into the `{{jira.acceptance_test_plan}}` field (Shift-Left), materialized as a Test Plan item in Planning. |
+| **ATR**               | Acceptance Test Results. The report filed in the Reporting stage.                                                            |
+| **ATS**               | Acceptance Test Set. The mandatory per-Story Test Set (`ATS: {STORY-KEY}: {story title}`) whose link to the Story provides coverage; ATP/ATR test lists derive from its membership. |
+| **FTP**               | Feature Test Plan. One per feature Epic, maintained by `sprint-testing`'s feature-test-planning as living context.           |
+| **RTP**               | Regression Test Plan. One long-lived Test Plan item per project (or module), `RTP: {PROJECT_KEY\|module}: Regression Test Plan`, parented to the QA Master Test Plan Epic. The Documentation stage promotes every Candidate TC into it; the Regression stage runs its membership. It has no terminal status — a regression run never completes the plan it ran from. Distinct from the MTP, which is the Epic plus `.context/master-test-plan.md` (strategy and bucket, never a Plan item). |
+| **STP**               | Sprint Test Plan. One per sprint, opened at sprint start by `sprint-testing` (fallback: `regression-testing`), closed at sprint end. Its description carries the sprint plan (one writer, read-first); its comments carry the append-only progress log, one entry per issue closed. It is the team-visible sprint state — when the comment log and a Story's ATR disagree, the ATR wins. |
+| **STR**               | Sprint Test Results. One per sprint, the sprint-close recap execution (`STR: Sprint#{N}: Regression Testing`).               |
 | **TC**                | Test Case. A single, traceable verification linked to an acceptance criterion.                                               |
-| **ATC**               | Acceptance Test Case. A TC implemented as code, carrying an `@atc('{{PROJECT_KEY}}-XXX-TC#')` decorator.                     |
+| **ATC**               | Acceptance Test Case — the test case itself. `@atc('PROJ-101')` is its representation in code: the decorator carries the TMS ticket key, nothing else. |
 | **PBI**               | Product Backlog Item. In this repo, the local folder (`.context/PBI/...`) that stores per-ticket and per-module knowledge.   |
-| **KATA**              | Komponent Action Test Architecture. The four-layer pattern used to organise automated tests.                                 |
+| **KATA**              | Komponent Action Test Architecture. Four named layers (TestContext · Base · domain Components · Fixtures) plus optional Steps; test files consume the Fixtures. |
 | **Subagent Dispatch Strategy** | Per-skill table declaring which stages delegate to subagents and with what pattern (Single / Sequential / Parallel / Background). Lives in each workflow `SKILL.md` under `## Subagent Dispatch Strategy`. |
 
 ---
@@ -169,8 +191,10 @@ The practice is organised in three conceptual tiers:
 │  │discovery  │ │  testing  │ │documentat.│ │automation │ │testing │ │
 │  └───────────┘ └───────────┘ └───────────┘ └───────────┘ └────────┘ │
 │                                                                     │
-│  Tool / utility skills                                              │
-│  acli · xray-cli · playwright-cli                                   │
+│  Tool / utility skills (in repo)                                    │
+│  acli · xray-cli                                                    │
+│  Community skills (installed by cli/install.ts, not committed)       │
+│  playwright-cli · playwright-best-practices · resend-cli            │
 │                                                                     │
 │  Shared Knowledge Layer                                             │
 │  Business flows · API docs · Test priorities · Per-ticket memory    │
@@ -188,27 +212,28 @@ The human sits on top. The AI never ships anything on its own. Every stage has a
 
 ### Middle tier — the AI skills
 
-Six core skills handle the end-to-end pipeline (one foundation + five workflow):
+Seven core skills handle the end-to-end pipeline (one foundation + six workflow):
 
-- **`agentic-qa-core`** — foundation skill. Hosts the canonical briefing template, dispatch patterns, and orchestration doctrine cited by every workflow skill, and provides the `init` bootstrap that writes `CLAUDE.md`, `.agents/project.yaml`, and the `agents-*` scripts when adopting the boilerplate.
+- **`agentic-qa-core`** — foundation skill. Hosts the canonical briefing template, dispatch patterns, and orchestration doctrine cited by every workflow skill, and provides the `init` bootstrap that writes `AGENTS.md`, `.agents/project.yaml`, and the `agents-*` scripts when adopting the boilerplate.
 - **`project-discovery`** — one-time onboarding. Generates the context files every other skill depends on.
-- **`sprint-testing`** — Stages 1–3. Planning, Execution, and Reporting per ticket. The everyday driver.
-- **`test-documentation`** — Stage 4. ROI analysis that decides which manual TCs are worth automating.
-- **`test-automation`** — Stage 5. Writing the actual KATA + Playwright test code.
-- **`regression-testing`** — Stage 6. Running the regression suite and emitting a release verdict.
+- **`shift-left-testing`** — the Shift-Left stage. Pre-sprint batch refinement of backlog Stories: ACs, gaps, and the pre-sprint ATP in the Story field.
+- **`sprint-testing`** — Planning, Execution and Reporting per ticket. The everyday driver.
+- **`test-documentation`** — the Documentation stage. ROI analysis that decides which manual TCs are worth automating.
+- **`test-automation`** — the Automation stage. Writing the actual KATA + Playwright test code.
+- **`regression-testing`** — the Regression stage. Running the regression suite and emitting a release verdict.
 
-Tool / utility skills — `acli` (Atlassian CLI for Jira work-item operations), `xray-cli` (Xray Cloud test management), `playwright-cli` (browser automation) — are invoked on demand or composed inside the workflow skills.
+Tool / utility skills committed in this repo — `acli` (Atlassian CLI for Jira work-item operations) and `xray-cli` (Xray Cloud test management) — are invoked on demand or composed inside the workflow skills. Browser automation resolves to `playwright-cli`, which is a **community skill installed at project level by `cli/install.ts` and deliberately not committed here**: it is composed the same way, but it is not part of the checkout.
 
 All skills share the **Knowledge Layer** (the `.context/` directory): business rules, API architecture, test priorities, and per-ticket memory.
 
 ### Bottom tier — the systems the AI operates on
 
-- **`[ISSUE_TRACKER_TOOL]`** — Jira issue management (Stories, Bugs, Epics) accessed via the `acli` skill (Atlassian CLI) by default; swappable via the Tool Resolution table in `CLAUDE.md`.
+- **`[ISSUE_TRACKER_TOOL]`** — Jira issue management (Stories, Bugs, Epics) accessed via the `acli` skill (Atlassian CLI) by default; swappable via the Tool Resolution table in `AGENTS.md`.
 - **`[TMS_TOOL]`** — the test management system holding ATPs, ATRs, and TCs. Resolves to the `xray-cli` skill in **Modality jira-xray** or to the `acli` skill in **Modality jira-native**. The modality is decided once per project in `test-documentation/SKILL.md` §Phase 0.
 - **`[DB_TOOL]`** — the live database, accessed through an MCP (DBHub by default). Used to find, generate, or verify test data.
 - **CI / CD** — the regression suite, typically GitHub Actions, reporting to Allure.
 
-The `[TOOL]` brackets are not decorative. Every skill in this repo writes tool calls in `[TAG_TOOL]` pseudocode, which resolves against the table in `CLAUDE.md` "Tool Resolution". Swap the row, swap the backend — no skill edits required.
+The `[TOOL]` brackets are not decorative. Every skill in this repo writes tool calls in `[TAG_TOOL]` pseudocode, which resolves against the table in `AGENTS.md` "Tool Resolution". Swap the row, swap the backend — no skill edits required.
 
 ---
 
@@ -260,39 +285,57 @@ The knowledge layer is organised in three tiers, mirroring the scope at which th
 ├── ADR/                          # Project level — test-architecture decisions (append-only, never regenerated)
 │   ├── README.md                #   When-to-write (two-gate) + status lifecycle + index
 │   └── ADR-NNNN-template.md     #   Copy → ADR-NNNN-<slug>.md per decision
-└── PBI/                          # Epic + Story level (Module = Epic, 1:1)
+└── PBI/                          # Epic + Story level (Module = Epic, 1:1) — GITIGNORED cache
+    ├── README.md                 # Tier rules + gitignore ladder         [COMMIT]
+    ├── templates/                # Skeletons                             [COMMIT]
     ├── epic-tree.md              # Master index of every Epic            [SYNC]
-    └── epics/
-        └── EPIC-<KEY>-<slug>/
-            ├── epic.md                          # Epic overview          [SYNC]
-            ├── feature-implementation-plan.md   # Feature-level dev plan [SYNC]
-            ├── feature-test-plan.md             # Feature-level test plan[SYNC]
-            ├── module-context.md                # Module overview (non-Jira)
-            ├── test-specs/                      # EPIC-level (non-Jira)
-            │   ├── ROADMAP.md   # All test IDs + automation status
-            │   ├── PROGRESS.md  # Current progress
-            │   └── <ID>/
-            │       ├── spec.md            # Test specification
-            │       ├── automation-plan.md # Code-level automation plan
-            │       └── atc/*.md           # Individual ATC designs
-            └── stories/
-                └── STORY-<KEY>-<slug>/
-                    ├── story.md                       # Story overview   [SYNC]
-                    ├── acceptance-criteria.md         # Per-field cache  [SYNC]
-                    ├── acceptance-test-plan.md        # ATP cache        [SYNC]
-                    ├── acceptance-test-results.md     # ATR cache        [SYNC]
-                    ├── comments.md                    # Jira comments    [SYNC]
-                    ├── context.md                     # Session notes (non-Jira)
-                    └── evidence/*.png                 # Captured evidence (non-Jira)
+    ├── epics/
+    │   └── EPIC-<KEY>-<slug>/
+    │       ├── epic.md                          # Epic overview          [SYNC]
+    │       ├── module-context.md                # '## Module Context (QA)' section of the Epic description [SYNC]
+    │       ├── feature-implementation-plan.md   # Feature-level dev plan [SYNC]
+    │       ├── feature-test-plan.md             # Feature-level test plan[SYNC]
+    │       ├── test-specs/                      # EPIC-level             [COMMIT]
+    │       │   ├── ROADMAP.md   # All test IDs + automation status
+    │       │   ├── PROGRESS.md  # Current progress
+    │       │   └── <ID>/
+    │       │       ├── spec.md            # Test specification
+    │       │       ├── automation-plan.md # Code-level automation plan
+    │       │       └── atc/*.md           # Individual ATC designs
+    │       └── stories/
+    │           └── STORY-<KEY>-<slug>/
+    │               ├── story.md                       # Story overview   [SYNC]
+    │               ├── acceptance-criteria.md         # Per-field cache  [SYNC]
+    │               ├── acceptance-test-plan.md        # ATP cache        [SYNC]
+    │               ├── acceptance-test-results.md     # ATR cache        [SYNC]
+    │               ├── comments.md                    # Jira comments    [SYNC]
+    │               ├── test-cases/                    # Linked Test issues [SYNC]
+    │               ├── context.md                     # Notes about the repo [LOCAL]
+    │               └── evidence/*.png                 # Captured evidence  [LOCAL]
+    ├── qa-artifacts/
+    │   └── _index.md                          # Register of the QA-bucket Epics (label `QA-Artifact`) [SYNC]
+    ├── bugs/BUG-<KEY>-<slug>/                  # Coverable folder: bug.md + ATP + ATR + defects/   [SYNC]
+    ├── improvements/IMPROVEMENT-<KEY>-<slug>/  # Same shape, one folder per coverable            [SYNC]
+    ├── tech-stories/TECHSTORY-<KEY>-<slug>/    # Same shape                                      [SYNC]
+    ├── tech-debts/TECHDEBT-<KEY>-<slug>/       # Same shape                                      [SYNC]
+    ├── defects/DEFECT-<KEY>-<slug>.md          # Standalone defect issues                        [SYNC]
+    ├── test-plans/{FTP|STP|ATP}-<KEY>-<slug>.md        # Filename mirrors the title acronym       [SYNC]
+    ├── test-executions/{STR|ATR|RETEST}-<KEY>-<slug>.md # Same rule                               [SYNC]
+    ├── test-sets/TESTSET-<KEY>-<slug>.md               # Xray container issues                    [SYNC]
+    └── preconditions/PRECONDITION-<KEY>-<slug>.md      # Xray container issues                    [SYNC]
 ```
 
-`[SYNC]` files mirror a Jira field and are a read-only cache materialized by `scripts/sync-jira-issues.ts` — never hand-written. Jira is the source of truth.
+Three tiers. **`[SYNC]`** mirrors a Jira field, is materialized by `scripts/sync-jira-issues.ts`, and is never hand-written — Jira is the source of truth and `bun run context:hydrate` rebuilds the lot. **`[COMMIT]`** is versioned in git because it describes the test code, not the ticket. **`[LOCAL]`** is disposable session output; nothing downstream may depend on it existing, because it only exists on the machine that made it.
 
-The canonical shape is documented in `.context/README.md`. The strategic reasoning behind the three-tier split lives in `CONTEXT.md` (repo root) — read that for the full rationale.
+Everything at Story altitude arrives through the coverage walk that starts at an Epic. The rungs above a Story — FTP, STP, STR, plus Test Sets and Preconditions — are structurally unreachable from that walk, so an unfiltered `pull` additionally sweeps the children of the four QA-process Epics and writes them into `test-plans/` and `test-executions/` under their title acronym (`--no-qa-artifacts` skips the sweep; the rationale is `.context/ADR/ADR-0001-artifact-ladder-local-cache.md`).
+
+The PBI tree as a whole is gitignored precisely because it regenerates: two sessions re-syncing at different times would otherwise commit conflicting copies of the same generated text. Session state lives outside the cache, under `.session/sprint-testing/`, so a re-sync cannot clobber it mid-run: per-ticket state (`test-session-memory.md`) at `.session/sprint-testing/<KEY>/`, and — in sprint-wide mode — the sprint's own `plan.md` + `progress.md` at `.session/sprint-testing/sprint-<N>/`, with one nested `<KEY>/` directory per issue. That sprint pair is local scaffolding, not a deliverable; the team-visible sprint state is the **STP** in Jira (§4 Glossary), whose description holds the plan and whose comments hold the append-only progress log.
+
+The canonical shape is documented in `.context/README.md`. The strategic reasoning behind the three-tier split lives in `.context/PBI/README.md` §"Three tiers, three lifecycles" — read that for the full rationale.
 
 ### Cross-skill references
 
-A second knowledge surface exists outside `.context/`: the `agentic-qa-core/references/*.md` files. They host the briefing template, the dispatch patterns decision guide, and the orchestration doctrine that workflow skills cite instead of duplicating. They are loaded on demand by other skills and form part of the practice's knowledge layer even though they live under `.claude/skills/` rather than `.context/`.
+A second knowledge surface exists outside `.context/`: the `agentic-qa-core/references/*.md` files. They host the briefing template, the dispatch patterns decision guide, and the orchestration doctrine that workflow skills cite instead of duplicating. They are loaded on demand by other skills and form part of the practice's knowledge layer even though they live under `.agents/skills/` rather than `.context/`.
 
 ### Project variables vs runtime credentials
 
@@ -332,10 +375,10 @@ Each source feeds the AI a specific kind of truth:
 | **Knowledge layer**       | Curated business rules, API docs, test priorities             | `.context/` files                                      |
 | **Database schema**       | Live tables, columns, relationships, real test data           | `[DB_TOOL]` — DBHub MCP by default                     |
 | **API spec**              | Every endpoint, request/response shapes, types                | `[API_TOOL]` — OpenAPI MCP by default                  |
-| **UI runtime**            | Real screenshots, accessibility tree, navigation state        | `[AUTOMATION_TOOL]` — `playwright-cli` skill           |
+| **UI runtime**            | Real screenshots, accessibility tree, navigation state        | `[AUTOMATION_TOOL]` — `playwright-cli` (community skill) |
 | **TMS**                   | Tickets, ACs, team discussion, test artefacts                 | `[TMS_TOOL]` — `xray-cli` skill (Jira/Xray) by default |
 
-The `[TAG_TOOL]` brackets map to concrete implementations via the **Tool Resolution** table in `CLAUDE.md`. Skills never hard-code a tool name — they call `[TMS_TOOL]` and let the table decide whether that means the Xray CLI, the Atlassian MCP, or something else the team plugged in.
+The `[TAG_TOOL]` brackets map to concrete implementations via the **Tool Resolution** table in `AGENTS.md`. Skills never hard-code a tool name — they call `[TMS_TOOL]` and let the table decide whether that means the Xray CLI, the Atlassian MCP, or something else the team plugged in.
 
 **TMS modality**: `[TMS_TOOL]` resolves to the `xray-cli` skill in **Modality jira-xray** or to the `acli` skill in **Modality jira-native**, per `test-documentation/SKILL.md` §Phase 0. In Modality jira-native, ATPs and ATRs live as Story custom fields with comment mirrors and TCs live as Jira `Test` issues; the workflow skills carry parallel pseudocode branches for both modalities.
 
@@ -355,17 +398,17 @@ The daily workflow is plain English. The QA engineer tells Claude Code what is n
 ### Example invocations
 
 ```text
-> Read @.context/reports/SPRINT-10-TESTING.md and process this sprint
-  → Auto-triggers: sprint-testing skill in sprint mode
+> Process sprint 10
+  → Auto-triggers: sprint-testing skill in sprint-wide mode
 
 > Test {{PROJECT_KEY}}-450
-  → Auto-triggers: sprint-testing skill in single-ticket mode
+  → Auto-triggers: sprint-testing skill in single-issue mode
 
 > Retest bug {{PROJECT_KEY}}-460
   → Auto-triggers: sprint-testing skill in bug mode
 
 > Continue sprint from {{PROJECT_KEY}}-450, mode yolo
-  → Auto-triggers: sprint-testing skill, resume + batch (no stops)
+  → Auto-triggers: sprint-testing skill, resume + sprint-wide (no stops)
 
 > Run regression suite
   → Auto-triggers: regression-testing skill
@@ -374,7 +417,7 @@ The daily workflow is plain English. The QA engineer tells Claude Code what is n
   → Auto-triggers: test-automation skill
 ```
 
-Auto-triggering is governed by each skill's `description` field, which lists the phrases the skill should respond to. The decision tree in `CLAUDE.md` documents the full mapping. Explicit invocation is also supported — `/sprint-testing`, `/test-automation`, and so on — for cases where determinism is preferred over pattern matching.
+Auto-triggering is governed by each skill's `description` field, which lists the phrases the skill should respond to. The decision tree in `AGENTS.md` documents the full mapping. Explicit invocation is also supported — `/sprint-testing`, `/test-automation`, and so on — for cases where determinism is preferred over pattern matching.
 
 ### What happens on invocation
 
@@ -434,22 +477,23 @@ This is what gives the practice AI **speed** without losing human **judgment**. 
 
 The orchestration model is not improvised per session — it is captured in canonical references that workflow skills load on demand. Engineers and skill authors should know where to look:
 
-- **`CLAUDE.md` §Orchestration Mode** — canonical project-level statement of the strategy (subagent-or-not decision rule, briefing format, error protocol).
-- **`agentic-qa-core/references/orchestration-doctrine.md`** — cacheable mirror loaded by subagents that need the full doctrine without re-reading `CLAUDE.md`.
-- **`agentic-qa-core/references/briefing-template.md`** — the six-component briefing format every dispatch uses (Goal · Context docs · Skills to load · Exact instructions · Report format · Rules).
+- **`AGENTS.md` §Orchestration Mode** — canonical project-level statement of the strategy (subagent-or-not decision rule, briefing format, error protocol).
+- **`agentic-qa-core/references/orchestration-doctrine.md`** — cacheable mirror loaded by subagents that need the full doctrine without re-reading `AGENTS.md`.
+- **`agentic-qa-core/references/briefing-template.md`** — the seven-component briefing format every dispatch uses (Goal · Context docs · Project Standards (auto-resolved) · Skills to load · Exact instructions · Report format · Rules).
 - **`agentic-qa-core/references/dispatch-patterns.md`** — decision guide for the four patterns (Single, Sequential, Parallel, Background) and when each applies.
+- **`agentic-qa-core/references/stage-gates.md`** — the Definition-of-Done checklist **and the agentic contract** per stage. This is the surface that turns the prose above into an enforced gate: it says what must be TRUE before the orchestrator advances, who signs each stage, what evidence must survive, the autonomy level (CSA 0-5), and whether a separate verifier is mandatory. Every one of the six workflow skills cites it; an orchestrator that advances a stage without checking it has skipped the gate, however complete the subagent's report looked.
 - **`## Subagent Dispatch Strategy`** sections inside each workflow `SKILL.md` (`shift-left-testing`, `sprint-testing`, `test-documentation`, `test-automation`, `regression-testing`, `framework-development`) — per-stage tables declaring which steps delegate to subagents and with what pattern.
 
 When a skill writes `Use the dispatch defined in §Subagent Dispatch Strategy: Parallel`, that line is shorthand for the full briefing assembled from the references above. The doctrine is a single source, cited from many places.
 
 ---
 
-## 10. Stages 1–3 Flow: Session Start → Planning → Execution → Reporting
+## 10. The in-sprint flow: Session Start → Planning → Execution → Reporting
 
 The `sprint-testing` skill handles the per-ticket work across Stages 1, 2 and 3. A full cycle compresses what would otherwise be a multi-hour manual workflow into a predictable, repeatable per-ticket process. Exact duration depends on scope and risk, but the practice is designed to keep mechanical work out of the engineer's hands so they can focus on judgement.
 
 ```
-  [Session Start]  →  [Stage 1]     →  [Stage 2]        →  [Stage 3]
+  [Session Start]  →  [Planning]    →  [Execution]      →  [Reporting]
                       Planning         Execution           Reporting
   Context + data     Risk + design    Smoke + tests      Results + bugs
        │                  │                  │                   │
@@ -468,9 +512,9 @@ The `sprint-testing` skill handles the per-ticket work across Stages 1, 2 and 3.
 - Explore the frontend and backend code related to the ticket.
 - Query the database via `[DB_TOOL]` for test data candidates (**generate > discover > modify** hierarchy — never hardcode).
 - Create or update the PBI folder (`.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/`).
-- Configure the browser automation environment via the `playwright-cli` skill.
+- Configure the browser automation environment via the `playwright-cli` skill (community, installed by `cli/install.ts`).
 
-### Stage 1 — Planning
+### Planning
 
 - Run a risk triage across each AC.
 - Design scenarios with equivalence partitioning and boundary analysis.
@@ -479,14 +523,14 @@ The `sprint-testing` skill handles the per-ticket work across Stages 1, 2 and 3.
 - Create TC records for each designed scenario, linked to the ATP and to the ACs they cover.
 - Present the plan to the engineer and wait for approval.
 
-### Stage 2 — Execution
+### Execution
 
 - Run the smoke test first as a Go/No-Go gate. If smoke fails, stop and report; do not spend time on deep testing.
 - Execute UI, API, and DB checks per the plan.
 - Capture evidence (screenshots, API responses, DB query results) into `evidence/`.
 - Classify any findings as bugs, observations, or acceptable deviations.
 
-### Stage 3 — Reporting
+### Reporting
 
 - Fill the Test Results (ATR) record in `[TMS_TOOL]` with status per TC.
 - File bug tickets following the naming convention documented inside the `sprint-testing` skill's references.
@@ -500,9 +544,9 @@ At the end of the cycle, every ticket has: a PBI folder on disk, an ATP and ATR 
 
 ## 11. Test Automation Engineering
 
-Automation is not the goal. **Automating the right tests with engineering rigor** is the goal. This is why Stage 4 (`test-documentation`) runs an ROI analysis first — only manual TCs that protect real regression risk get automated. The result is a lean, maintainable suite, not test bloat.
+Automation is not the goal. **Automating the right tests with engineering rigor** is the goal. This is why the Documentation stage (`test-documentation`) runs an ROI analysis first — only manual TCs that protect real regression risk get automated. Those Candidates are promoted into the project's `RTP`, and that membership — not any local report — is what this stage picks up. The result is a lean, maintainable suite, not test bloat.
 
-Stage 5 (`test-automation`) is structured as a three-phase pipeline — Plan, Code, Review:
+The Automation stage (`test-automation`) is structured as a three-phase pipeline — Plan, Code, Review:
 
 ```
   [1] PLAN          →      [2] CODE          →      [3] REVIEW
@@ -518,19 +562,30 @@ These three phases map cleanly to the dispatch patterns: **Single** (Plan — on
 
 ### The KATA Architecture
 
-Automated tests live in a four-layer architecture called **KATA** (Komponent Action Test Architecture). The layering is intentional: each layer has a single responsibility, and each layer can be tested or swapped independently.
+Automated tests live in **KATA** (Komponent Action Test Architecture). The canonical formula, and the only phrasing any surface should reproduce:
+
+> **KATA organises automation in four layers with a single direction of dependency: TestContext, Base, domain Components and Fixtures. Steps is an optional intermediate layer between Components and Fixtures. Test files consume the Fixtures — they are not a layer.**
+
+Short form for a chip or a title: **"four named layers, plus optional Steps"**. Never a bare number. The layering is intentional: each layer has a single responsibility, and each layer can be tested or swapped independently. The authority for the detail is `.agents/skills/test-automation/references/kata-architecture.md`; the invariants that gate a framework change are in `.agents/skills/framework-development/references/kata-invariants.md`.
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │  LAYER 4: TestFixture                             [injector]   │
-│  Dependency injection — { api } { ui } { test } { steps }      │
+│  Dependency injection — { api } { ui } { test }                │
 │  File: tests/components/TestFixture.ts                         │
+└────────────────────────────────────────────────────────────────┘
+                              ▲
+┌────────────────────────────────────────────────────────────────┐
+│  LAYER 3.5: Steps (OPTIONAL)                    [your code]    │
+│  Reusable ATC chains used as preconditions — NOT @atc-decorated │
+│  Not fixture-registered: tests instantiate them directly        │
+│  Dir: tests/components/steps/                                  │
 └────────────────────────────────────────────────────────────────┘
                               ▲
 ┌────────────────────────────────────────────────────────────────┐
 │  LAYER 3: Components (domain)                   [your code]    │
 │  {{Domain}}Api · {{Domain}}Page · {{Domain}}Flow               │
-│  Each ATC carries @atc('{{PROJECT_KEY}}-XXX-TC#')              │
+│  Each ATC carries @atc('PROJ-101')                             │
 │  Dirs: tests/components/api/  ·  tests/components/ui/          │
 └────────────────────────────────────────────────────────────────┘
                               ▲
@@ -547,7 +602,10 @@ Automated tests live in a four-layer architecture called **KATA** (Komponent Act
 │  File: tests/components/TestContext.ts                         │
 └────────────────────────────────────────────────────────────────┘
 
-        ▲ Test files orchestrate ATCs across components
+        ▲ Test files CONSUME Layer 4 — they orchestrate ATCs into scenarios.
+          A test file is not a layer.  Dirs: tests/e2e/  ·  tests/integration/
+
+        DRY zones that are NOT layers: tests/utils/  ·  tests/data/  ·  config/
 ```
 
 ### Three load-bearing principles
@@ -556,7 +614,7 @@ Automated tests live in a four-layer architecture called **KATA** (Komponent Act
 An Acceptance Test Case (ATC) is a full scenario: navigate + act + verify. ATCs are atomic — they do not call each other. When a reusable chain is needed, it lives in the Steps module. Fixed assertions stay inside the ATC; test-level assertions live in the test file.
 
 **Principle 2 — `@atc` decorator traces to the TMS.**
-Every automated test carries an `@atc('{{PROJECT_KEY}}-XXX-TC#')` decorator. When CI fails, the decorator makes it possible to walk the chain in reverse: failing ATC → TMS TC → ATP → User Story → Acceptance Criterion. The AI can answer "which requirement is at risk?" in one hop.
+Every automated test carries an `@atc('PROJ-101')` decorator — the argument is the TMS ticket key exactly as `kata-manifest.json` records it. When CI fails, the decorator makes it possible to walk the chain in reverse: failing ATC → TMS TC → ATP → User Story → Acceptance Criterion. The AI can answer "which requirement is at risk?" in one hop.
 
 **Principle 3 — Smart fixtures by test type.**
 Fixtures are chosen to minimise cost:
@@ -575,7 +633,7 @@ The AI writes the implementation plan first — scenarios, components that exist
 
 Full details live in the skill's own references:
 
-- `.claude/skills/test-automation/references/`
+- `.agents/skills/test-automation/references/`
 
 ---
 
@@ -593,33 +651,36 @@ The practice uses three complementary kinds of AI capability:
 | --------------------- | ------------ | ------------------------------------------------------------------------------ |
 | `agentic-qa-core`      | Foundation   | (auto, cited by other skills) — passive reference host for briefing template, dispatch patterns, orchestration doctrine, skill-composition strategy |
 | `project-discovery`   | Onboarding   | "set up this project", "onboard this repo", "generate business-data-map", "discover the architecture" |
-| `shift-left-testing`  | 0 (pre-sprint) | "shift-left these stories", "groom the backlog", "pre-sprint QA", "refine these N stories", batch of Story IDs in Backlog/Shift-Left QA/Estimation/Ready For Dev |
-| `sprint-testing`      | 1 · 2 · 3    | "test {{PROJECT_KEY}}-XXX", "process sprint N", "retest bug", "QA this story", "mode yolo" |
-| `test-documentation`  | 4            | "document tests", "ROI analysis", "Candidate vs Manual", "fix traceability"    |
-| `test-automation`     | 5            | "automate TC", "write E2E test", "KATA component", "review test code"          |
-| `regression-testing`  | 6            | "run regression", "quality report", "GO/NO-GO decision", "analyze failures"    |
+| `shift-left-testing`  | Shift-Left   | "shift-left these stories", "groom the backlog", "pre-sprint QA", "refine these N stories", batch of Story IDs in Backlog/Shift-Left QA/Estimation/Ready For Dev |
+| `sprint-testing`      | Planning · Execution · Reporting | "test {{PROJECT_KEY}}-XXX", "process sprint N", "retest bug", "QA this story", "mode yolo" |
+| `test-documentation`  | Documentation | "document tests", "ROI analysis", "Candidate vs Manual", "fix traceability"    |
+| `test-automation`     | Automation   | "automate TC", "write E2E test", "KATA component", "review test code"          |
+| `regression-testing`  | Regression   | "run regression", "quality report", "GO/NO-GO decision", "analyze failures"    |
 | `acli`                | any          | Atlassian CLI for Jira from the terminal — work-item create/edit/transition, bulk operations, scripting Jira |
 | `xray-cli`            | any          | TMS CLI operations — create tests, manage executions, import results, backup   |
-| `playwright-cli`      | any          | Browser automation — screenshots, navigation, form filling, tracing, mocking   |
 
-All skill definitions live under `.claude/skills/<name>/SKILL.md`, with detailed references under `.claude/skills/<name>/references/`.
+Every skill in the table above lives under `.agents/skills/<name>/SKILL.md`, with detailed references under `.agents/skills/<name>/references/`.
 
-### Commands (`/<name>` — on-demand utility)
+**Community skills are not in that tree.** `playwright-cli`, `playwright-best-practices` and `resend-cli` are installed at PROJECT level by `cli/install.ts` and are **not committed to this repo** — `.agents/skills/playwright-cli/` does not exist in a fresh clone. They are composed into the workflow skills exactly like the first-party ones (`[AUTOMATION_TOOL]` resolves to `playwright-cli`), but they arrive from the installer, not from the checkout. The tier model is in `agentic-qa-core/references/skill-composition-strategy.md`. OpenCode and Codex read that tree natively; Claude Code reaches the same files through the generated `.claude/skills` alias (a symlink on POSIX, a junction on Windows — gitignored, never hand-edited).
 
-Commands are deterministic, single-purpose prompts invoked explicitly. Unlike skills, they do not auto-trigger.
+### Commands (`/<name>` — on-demand alias)
 
-| Command                       | Purpose                                                  |
-| ----------------------------- | -------------------------------------------------------- |
-| `/adapt-framework`            | Adapt this boilerplate's KATA test architecture to a project already reverse-engineered by `/project-discovery` (Plan -> Approval -> Implement) |
-| `/sync-ai-memory`             | Sync all AI-critical documents across the repo (README.md, CLAUDE.md, INSTALLER.md, CONTEXT.md, docs/*.md, docs/onboarding.html) so they consistently reflect the current `.context/` and `package.json` state |
-| `/master-test-plan`           | Generate or refresh `.context/master-test-plan.md` — what to test and why, derived from the discovery artefacts |
-| `/business-data-map`          | Generate or refresh `.context/business/business-data-map.md` (entities, flows, state machines) |
-| `/business-feature-map`       | Generate or refresh `.context/business/business-feature-map.md` (feature catalog, CRUD matrix, integrations) |
-| `/business-api-map`           | Generate or refresh `.context/business/business-api-map.md` (auth model, critical endpoints, architecture) |
-| `/fix-traceability`           | Repair broken TMS traceability links (US → ATP → ATR → TC) |
-| `/break-down-tests`           | Plain-English breakdown of automated tests for a given module / spec |
+Commands are explicit, deterministic entry points. Unlike skills, they do not auto-trigger — and they carry no workflow of their own: each one is a thin transport alias that selects a skill plus a mode and forwards `$ARGUMENTS` to it.
 
-All command definitions live under `.claude/commands/<name>.md`.
+| Command                       | Routes to (skill · mode)             | Purpose                                                  |
+| ----------------------------- | ------------------------------------- | -------------------------------------------------------- |
+| `/adapt-framework`            | `adapt-framework` · `adapt`           | Adapt this boilerplate's KATA test architecture to a project already reverse-engineered by `/project-discovery` (Plan -> Approval -> Implement) |
+| `/sync-ai-memory`             | `sync-ai-context` · `sync`            | Sync all AI-critical documents across the repo (README.md, AGENTS.md, INSTALLER.md, CONTEXT.md, docs/*.md, docs/onboarding.html) so they consistently reflect the current `.context/` and `package.json` state |
+| `/master-test-plan`           | `project-context` · `test-plan`       | Generate or refresh `.context/master-test-plan.md` — what to test and why, derived from the discovery artefacts |
+| `/business-data-map`          | `project-context` · `data`            | Generate or refresh `.context/business/business-data-map.md` (entities, flows, state machines) |
+| `/business-feature-map`       | `project-context` · `features`        | Generate or refresh `.context/business/business-feature-map.md` (feature catalog, CRUD matrix, integrations) |
+| `/business-api-map`           | `project-context` · `api`             | Generate or refresh `.context/business/business-api-map.md` (auth model, critical endpoints, architecture) |
+| `/fix-traceability`           | `test-documentation` · `repair-traceability` | Repair broken TMS traceability links (US → ATP → ATR → TC) |
+| `/break-down-tests`           | `test-automation` · `explain`         | Plain-English breakdown of automated tests for a given module / spec |
+| `/jira-components`            | `jira-administration` · `components`  | Reconcile the project's Jira Components after a read-first analysis and explicit approval |
+| `/jira-instance-migration`    | `jira-administration` · `instance-migration` | Repoint the repo at a different Atlassian instance and regenerate the Jira catalogs |
+
+`.agents/compatibility/command-aliases.json` is the single source for all ten. The wrappers under `.claude/commands/<name>.md` and `.opencode/commands/<name>.md` are GENERATED from it (`bun run agents:compat`) and validated byte-for-byte by `bun run agents:compat:check`, which fails a wrapper that has grown a body. Never hand-edit one. Codex has no command surface — invoke the skill directly there.
 
 ### Integrations (live system access)
 
@@ -631,11 +692,11 @@ MCPs and CLIs are how the AI talks to real systems. Without them, the AI can onl
 | `[ISSUE_TRACKER_TOOL]` | Atlassian CLI    | Fetch tickets, comments, transitions                  |
 | `[DB_TOOL]`        | DBHub MCP            | SQL queries — explore schema, discover and verify test data |
 | `[API_TOOL]`       | OpenAPI MCP          | Contract exploration, endpoint discovery              |
-| `[AUTOMATION_TOOL]`| `playwright-cli` skill | Browser automation — screenshots, tracing, mocking  |
+| `[AUTOMATION_TOOL]`| `playwright-cli` (community skill) | Browser automation — screenshots, tracing, mocking  |
 | `context7` MCP     | Anthropic-ecosystem  | Official library documentation                        |
 | `tavily` MCP       | Anthropic-ecosystem  | Web search for community solutions                    |
 
-Each `[TAG_TOOL]` resolves via the Tool Resolution table in `CLAUDE.md`. Swap the row to swap the backend — skills keep calling the same tag.
+Each `[TAG_TOOL]` resolves via the Tool Resolution table in `AGENTS.md`. Swap the row to swap the backend — skills keep calling the same tag.
 
 **Decision rule:**
 
@@ -648,7 +709,7 @@ Authentication tokens for long-lived MCPs expire on their own cadence. Refresh s
 
 ## 13. The Quality Gate: GO / CAUTION / NO-GO
 
-Every release candidate passes through the same gate. There is no "I think it's fine" shipping decision — the verdict is data-driven, owned by the `regression-testing` skill (Stage 6).
+Every release candidate passes through the same gate. There is no "I think it's fine" shipping decision — the verdict is data-driven, owned by the `regression-testing` skill (the Regression stage).
 
 ### The three verdicts
 
@@ -672,6 +733,7 @@ Classification decides the release verdict. Five flaky tests do not block a rele
 
 ### The artefacts
 
+- The suite's scope is the membership of the project's `RTP` — the Documentation stage promotes every `regression-candidate` TC into it, and the STR is written against that list.
 - GitHub Actions runs the regression suite nightly and on-demand (`.github/workflows/`).
 - Allure generates the report dashboard.
 - The skill emits a release note with the verdict, the pass rate, the critical failures (if any), and the classification summary.
@@ -685,9 +747,9 @@ To illustrate how the pieces fit together, here is what a typical ticket's journ
 Consider a ticket `{{PROJECT_KEY}}-XXX` with a handful of acceptance criteria covering a revenue-impacting feature:
 
 1. **Session Start.** The `sprint-testing` skill loads project context, opens the ticket via `[ISSUE_TRACKER_TOOL]`, explores the frontend (`{{FRONTEND_REPO}}`) and backend (`{{BACKEND_REPO}}`) code paths related to the feature, queries the database via `[DB_TOOL]` for test data candidates, and creates the PBI folder for the ticket.
-2. **Stage 1 — Planning.** Risk triage across each AC. Test cases are designed per AC using equivalence partitioning and boundary analysis. An ATP is created in `[TMS_TOOL]` and TCs are linked to the ATP and to the ACs they cover. The plan is presented to the engineer for approval.
-3. **Stage 2 — Execution.** The smoke test runs first as a Go/No-Go gate. If it passes, the skill executes the planned UI, API, and DB checks, capturing evidence into the PBI `evidence/` folder.
-4. **Stage 3 — Reporting.** The ATR is filled in `[TMS_TOOL]` with status per TC. Any bugs are filed following the naming convention. A QA-done comment is posted on the ticket and the tracker status is transitioned.
+2. **Planning.** Risk triage across each AC. Test cases are designed per AC using equivalence partitioning and boundary analysis. An ATP is created in `[TMS_TOOL]` and TCs are linked to the ATP and to the ACs they cover. The plan is presented to the engineer for approval.
+3. **Execution.** The smoke test runs first as a Go/No-Go gate. If it passes, the skill executes the planned UI, API, and DB checks, capturing evidence into the PBI `evidence/` folder.
+4. **Reporting.** The ATR is filled in `[TMS_TOOL]` with status per TC. Any bugs are filed following the naming convention. A QA-done comment is posted on the ticket and the tracker status is transitioned.
 5. **Traceability verification.** The `/fix-traceability` command (or the `xray-cli` skill's trace operation) walks the chain and confirms every link — Story → ATP → ATR → TCs — is present and correct.
 
 Every artefact lives in the TMS and in the PBI folder on disk. The AI produces the plan, runs the tests, files the results, and verifies traceability. The engineer reviews and approves at each checkpoint.
@@ -729,13 +791,13 @@ Treat these as a starting point, not a canon. Add fields that map to your team's
 
 ### What ships in this repository
 
-- **A foundation skill (`agentic-qa-core`)** — bootstraps `CLAUDE.md`, `.agents/project.yaml`, and the `agents-*` scripts; hosts the canonical orchestration doctrine, briefing template, and dispatch patterns cited by every workflow skill.
+- **A foundation skill (`agentic-qa-core`)** — bootstraps `AGENTS.md`, `.agents/project.yaml`, and the `agents-*` scripts; hosts the canonical orchestration doctrine, briefing template, and dispatch patterns cited by every workflow skill.
 - **A roster of stage-aware AI skills** — auto-triggered by user intent, orchestrated with human-in-the-loop checkpoints. Each stage of the pipeline has its own skill. The current roster is enumerated in Section 12.
 - **A library of utility commands** — deterministic, single-purpose, invoked with `/<name>`. The current library is enumerated in Section 12.
 - **Live system integrations** — MCPs for the database, API, TMS, and library documentation, plus first-party CLIs for TMS operations and browser automation. The current set is enumerated in Section 12.
 - **A structured context layer** — project, module, and ticket-level knowledge, on disk and version-controlled. Contains business rules, API documentation, per-ticket memory, and team guidelines.
 - **TMS integration with traceability** — ATPs, ATRs, TCs linked to user stories, with programmatic traceability verification via `/fix-traceability` and the `xray-cli` skill.
-- **A KATA automated test suite scaffold** — four-layer architecture, `@atc` decorators tracing every test to a TMS TC, smart fixtures, ROI-curated scope.
+- **A KATA automated test suite scaffold** — four named layers plus optional Steps, `@atc` decorators tracing every test to a TMS TC, smart fixtures, ROI-curated scope.
 - **A CI/CD pipeline** — build, smoke, sanity, and regression workflows in GitHub Actions.
 - **A data-driven quality gate** — GO / CAUTION / NO-GO, with AI-classified failures.
 
@@ -752,16 +814,16 @@ The rest is execution.
 **Last Updated**: 2026-04-26
 
 **See also**:
-- `CLAUDE.md` — canonical project memory, Tool Resolution, and skill routing (mirrored at `CLAUDE.md`)
+- `AGENTS.md` — canonical project memory, Tool Resolution, and skill routing (Claude Code loads it through the generated one-line `CLAUDE.md` shim)
 - `CONTEXT.md` — strategy behind the three-tier context split (repo root)
 - `docs/methodology/IQL-methodology.md` — phased methodology deep-dive
-- `.claude/skills/agentic-qa-core/SKILL.md` — foundation skill internals (bootstrap + shared references)
-- `.claude/skills/agentic-qa-core/references/orchestration-doctrine.md` — canonical orchestration doctrine cited by every workflow skill
-- `.claude/skills/acli/SKILL.md` — Atlassian CLI integration for Jira work-item operations
-- `.claude/skills/test-automation/references/` — KATA architecture, `@atc` decorator, and traceability chain
+- `.agents/skills/agentic-qa-core/SKILL.md` — foundation skill internals (bootstrap + shared references)
+- `.agents/skills/agentic-qa-core/references/orchestration-doctrine.md` — canonical orchestration doctrine cited by every workflow skill
+- `.agents/skills/acli/SKILL.md` — Atlassian CLI integration for Jira work-item operations
+- `.agents/skills/test-automation/references/` — KATA architecture, `@atc` decorator, and traceability chain
 - `.context/README.md` — canonical context layout
-- `.claude/skills/project-discovery/SKILL.md` — onboarding skill internals
-- `.claude/skills/sprint-testing/SKILL.md` — Stages 1–3 skill internals
-- `.claude/skills/test-documentation/SKILL.md` — Stage 4 skill internals
-- `.claude/skills/test-automation/SKILL.md` — Stage 5 skill internals
-- `.claude/skills/regression-testing/SKILL.md` — Stage 6 skill internals
+- `.agents/skills/project-discovery/SKILL.md` — onboarding skill internals
+- `.agents/skills/sprint-testing/SKILL.md` — Stages 1–3 skill internals
+- `.agents/skills/test-documentation/SKILL.md` — Documentation stage internals
+- `.agents/skills/test-automation/SKILL.md` — Automation stage internals
+- `.agents/skills/regression-testing/SKILL.md` — Regression stage internals
