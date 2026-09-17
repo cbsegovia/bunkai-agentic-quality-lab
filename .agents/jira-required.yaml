@@ -19,45 +19,59 @@
 #   unmapped  — fields the methodology references semantically but that have no
 #               concrete Jira field yet. Skills mention them as literal markers
 #               (e.g. `customfield_ATR`) with TODO comments. Reported as INFO.
+#
+# Fallback (`fallback:` key, per field):
+#   Some custom fields may not exist in every Jira instance. For any field a
+#   skill WRITES, declare a `fallback:` so the skill never blocks when the field
+#   is absent — it writes the content to the fallback target instead.
+#     fallback: { target: comment, label: "Acceptance Test Plan (ATP)" }
+#   target — `comment` (default; posts a structured Jira comment headed `## <label>`)
+#            or `description` (appends to the issue description).
+#   label  — the human heading used in the comment/description block.
+#   Contract: scripts/sync-jira-issues.ts emits a pointer stub for an unresolved
+#   field's dedicated .md; skills then read the fallback (comments.md/description).
+#   Fields with NO `fallback:` are PO/planning-owned (mockup, story_points,
+#   weblink) — skills read them, never author them, so no fallback is needed.
 
 required:
   # ---- Story / User-story fields (consumed by scripts/sync-jira-issues.ts) ----
   acceptance_criteria:
     name: ✅ Acceptance Criteria (Gherkin)
     type: string
+    fallback: { target: comment, label: Acceptance Criteria }
     description: Gherkin-formatted acceptance criteria attached to user stories.
     used_by: [sync-jira-issues]
 
   acceptance_test_results:
     name: 🧪 Acceptance Test Results (ATR)
     type: string
+    fallback: { target: comment, label: Acceptance Test Results (ATR) }
     description: |
-      Stores the QA test report (ATR) on the Story (Modality jira-native comment-mirror flow).
-      Mirrored as a Jira comment for diff history. Modality jira-xray teams use a separate
-      Test Execution issue.
+      Stores the QA test report (ATR) on the Story (Modality jira-native). Authored in-session
+      and written to this field; when the field is absent it falls back to a `## Acceptance Test
+      Results (ATR)` Jira comment. Modality jira-xray teams use a separate Test Execution issue.
     used_by: [sprint-testing, test-documentation]
 
   business_rules_specification:
     name: 🚩Business Rules Specification
     type: string
+    fallback: { target: comment, label: Business Rules Specification }
     description: 'Business rules tied to a user story, separate from acceptance criteria.'
     used_by: [sync-jira-issues]
 
   scope:
     name: Scope ⛳
     type: string
-    description: In-scope / out-of-scope notes captured at story-grooming time.
+    fallback: { target: comment, label: Scope }
+    description: In-scope items only — what the story IS expected to deliver. Exclusions live in the separate `out_of_scope` field.
     used_by: [sync-jira-issues]
 
   out_of_scope:
     name: 🏴 Out Of Scope
     type: string
     fallback: { target: comment, label: Out Of Scope }
-    description: |
-      Explicit exclusions from the story scope — what this story is NOT going
-      to deliver. Complementary to `scope`. Surfaces scope-creep risks during
-      sprint planning and shift-left QA review.
-    used_by: [sync-jira-issues, product-management]
+    description: Explicit exclusions from the story scope — what this story is NOT going to deliver. Complementary to `scope`.
+    used_by: [sync-jira-issues]
 
   mockup:
     name: Mockup 🎴
@@ -68,6 +82,7 @@ required:
   workflow:
     name: 🧬WORKFLOW
     type: string
+    fallback: { target: comment, label: Workflow }
     description: User journey / workflow narrative for the story.
     used_by: [sync-jira-issues]
 
@@ -83,62 +98,59 @@ required:
     description: External reference URL attached to the story.
     used_by: [sync-jira-issues]
 
-  # ---- Dev-side planning fields (Epic + Story level) ----
-  # Consumed by sprint-development/references/{feature-plan,story-plan,implement-story}.md
-  # — the dev-side workflow stores its planning artifacts on Jira so the loop
-  # survives session resets (Jira is the source of truth, local files are caches).
+  # ---- Epic + Story planning fields (Dev/QA) — referenced by scripts/sync-jira-issues.ts
+  # SLUG_MAPPING and materialized as per-field .md files. Shared with the dev boilerplate
+  # so a single Jira workspace serves both repos; absent fields degrade to a sync stub. ----
   feature_implementation_plan:
     name: Feature Implementation Plan (Dev)🛠️
     type: string
     fallback: { target: comment, label: Feature Implementation Plan (Dev) }
     description: |
-      Epic-level technical implementation plan authored by sprint-development's
-      planning stage, written to this field on the Epic so the plan survives local-context
-      loss, then synced to `.context/PBI/epics/EPIC-<KEY>-<slug>/feature-implementation-plan.md`.
-    used_by:
-      - sprint-development/references/feature-plan.md
+      Epic-level technical implementation plan (Dev side). Cross-repo field shared with the
+      dev boilerplate; the QA sync materializes it as `feature-implementation-plan.md` when present.
+    used_by: [sync-jira-issues]
 
   feature_test_plan:
     name: 🧪 Feature Test Plan (QA)
     type: string
     fallback: { target: comment, label: Feature Test Plan (QA) }
     description: |
-      Epic-level QA test plan (test strategy + coverage approach for the whole
-      feature/epic). Counterpart to feature_implementation_plan (Dev). Synced to
-      local by `jira:sync-issues` as `feature-test-plan.md` inside the epic folder.
-    used_by:
-      - agentic-qa-boilerplate
-      - sync-jira-issues
+      Epic-level QA test plan (strategy + coverage approach for the whole feature/epic).
+      Authored by sprint-testing/feature-test-planning. ITEM-FIRST: the home of the FTP body
+      is the `FTP: {EPIC-KEY}: {feature}` Test Plan item (parent: QA Master Test Plan), which
+      syncs to `.context/PBI/test-plans/FTP-<KEY>-<slug>.md`. THIS FIELD IS THE FALLBACK ONLY,
+      for an instance without the Test Plan work type; when used, it syncs to
+      `.context/PBI/epics/EPIC-<KEY>-<slug>/feature-test-plan.md`.
+    used_by: [sprint-testing, sync-jira-issues]
 
   spec_implementation_plan:
     name: Spec Implementation Plan (Dev)🛠️
     type: string
     fallback: { target: comment, label: Spec Implementation Plan (Dev) }
     description: |
-      Story-level technical implementation plan authored by sprint-development's
-      planning stage (per-story slice of the parent feature plan), written to this
-      field on the Story so the plan survives local-context loss, then synced to
-      `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/implementation-plan.md`.
-    used_by:
-      - sprint-development/references/story-plan.md
-      - sprint-development/references/implement-story.md
+      Story-level technical implementation plan (Dev side). Cross-repo field shared with the
+      dev boilerplate; the QA sync materializes it as `implementation-plan.md` when present.
+    used_by: [sync-jira-issues]
 
   # ---- Bug / Defect fields (consumed by scripts/sync-jira-issues.ts + sprint-testing reporting) ----
   actual_result:
     name: 🐞 Actual Result (Comportamiento)
     type: string
+    fallback: { target: comment, label: Actual Result }
     description: Observed behavior captured during bug repro.
     used_by: [sync-jira-issues, sprint-testing]
 
   expected_result:
     name: ✅ Expected Result (Output)
     type: string
+    fallback: { target: comment, label: Expected Result }
     description: 'Expected behavior per acceptance criteria, contrasted against the bug.'
     used_by: [sync-jira-issues, sprint-testing]
 
   error_type:
     name: Error Type
     type: option
+    fallback: { target: comment, label: Error Type }
     options: [content, crash, data, functional, integration, performance, security, visual]
     description: Bug taxonomy by error category.
     used_by: [sync-jira-issues, sprint-testing]
@@ -146,6 +158,7 @@ required:
   severity:
     name: Severity 🚩
     type: option
+    fallback: { target: comment, label: Severity }
     options: [critica, mayor, menor, moderada, trivial]
     description: Bug severity classification (impact-based).
     used_by: [sync-jira-issues, sprint-testing]
@@ -153,6 +166,7 @@ required:
   test_environment:
     name: Test Environment 📦️
     type: option
+    fallback: { target: comment, label: Test Environment }
     options: [dev, production, qa, staging, uat]
     description: Environment where the bug was reproduced or where the test ran.
     used_by: [sync-jira-issues, sprint-testing]
@@ -160,6 +174,7 @@ required:
   root_cause:
     name: Root Cause🐞
     type: option
+    fallback: { target: comment, label: Root Cause }
     options:
       - code_error
       - configuration_error
@@ -175,54 +190,66 @@ required:
   workaround:
     name: 🚩 Workaround
     type: string
+    fallback: { target: comment, label: Workaround }
     description: Temporary mitigation steps to unblock users until the fix ships.
     used_by: [sync-jira-issues, sprint-testing]
 
   evidence:
     name: 🧫EVIDENCE
     type: string
+    fallback: { target: comment, label: Evidence }
     description: 'Bug evidence: screenshots, traces, logs, repro recordings.'
     used_by: [sync-jira-issues, sprint-testing]
 
   fix:
     name: Fix
     type: option
+    fallback: { target: comment, label: Fix }
     options: [bugfix, hotfix]
     description: Type of fix applied (bugfix vs urgent hotfix).
     used_by: [sync-jira-issues, sprint-testing]
+
+  # ---- Cross-work-type QA ownership (consumed by every work-type skill) ----
+  qa_assignee:
+    name: QA Assignee
+    type: user
+    fallback: { target: comment, label: QA Assignee }
+    description: |
+      The QA who owns testing for a work item — the QA-lane parallel of the native
+      `assignee` (dev owner), distinct from `reporter` (who raised it ≠ who retests it).
+      Set on EVERY work-type issue (story / tech_story / tech_debt / bug / defect /
+      improvement) to the authenticated session user (self-assign); NEVER overwrite an
+      existing owner except on an explicit, justified handover. Doctrine:
+      agentic-qa-core/references/defect-management-doctrine.md (Part 2).
+    used_by:
+      [sprint-testing, test-documentation, test-automation, regression-testing, shift-left-testing]
 
   # ---- TMS Modality jira-native fields (no Xray) ----
   acceptance_test_plan:
     name: 🧪 Acceptance Test Plan (ATP)
     type: string
+    fallback: { target: comment, label: Acceptance Test Plan (ATP) }
     description: |
-      Stores the QA Acceptance Test Plan body on the Story itself (Modality jira-native
-      flow). Mirrored as a Jira comment for diff history. Modality jira-xray teams
-      use a separate Test Plan issue and may not need this field.
+      Stores the QA Acceptance Test Plan body on the Story itself (Modality jira-native).
+      Authored in-session and written to this field; when the field is absent it falls back to
+      a `## Acceptance Test Plan (ATP)` Jira comment. Modality jira-xray teams use a separate
+      Test Plan issue and may not need this field.
     used_by: [sprint-testing, test-documentation]
 
   test_status:
     name: Test Status🧪
     type: option
+    fallback: { target: comment, label: Test Status }
     options: [blocked, failed, n_r, passed]
     description: Per-Test issue execution status (Jira-native TMS).
     used_by: [test-documentation]
-
-  qa_assignee:
-    name: QA Assignee
-    type: user
-    description: |
-      Single User Picker naming the QA who owns testing for an issue (self-assign).
-      Set when a Story is taken into testing (start_testing) and on every filed
-      Bug / Defect / Improvement. NEVER-OVERWRITE an existing owner (read-before-write);
-      distinct from the native dev `assignee`.
-    used_by: [sprint-testing, shift-left-testing]
 
 optional:
   # Fields that enhance the workflow but won't break it if missing.
   to_be_automated:
     name: To Be Automated (QA)🧪
     type: option
+    fallback: { target: comment, label: To Be Automated }
     options: [yes, no]
     description: Whether the Test should be automated (ROI verdict from test-documentation).
     used_by: [test-documentation]
@@ -237,51 +264,116 @@ unmapped:
 # — declare a slug here when the methodology expects a field semantically but
 # no real Jira field exists yet, then promote it to `required:` once configured.)
 
-# Jira issue link types the methodology uses. Slugs validated by `bun run vars:check`;
-# workspace resolution (`.agents/jira-link-types.json`) validated by `bun run jira:check`.
+# Issue-link types the QA methodology needs for traceability between work items
+# (Story↔Test coverage, Story↔Defect causality, Story-blocked gates). Slug-based
+# so workspaces with custom link-type names can override. Resolved per workspace
+# by `bun run jira:sync-link-types` → `.agents/jira-link-types.json`.
+#
+# NEVER hardcode link-type names ("Test", "Blocks", "Problem/Incident") in skill
+# content. Always resolve via {{jira.link_types.<slug>}}, .outward, .inward,
+# .fallback. Creation doctrine + the acli --out/--in inversion gotcha live in
+# agentic-qa-core/references/traceability-linking.md.
+#
+# NOTE: Test↔Test Set membership is NOT a Jira issuelink — it is Xray-internal;
+# handle via /xray-cli, never `acli link create`.
 link_types:
   required:
     test:
-      name: Test # live instance name (confirmed 2026-08-26 via GET /rest/api/3/issueLinkType) — was cached as "Tests" (plural), drift
+      name: Test
       outward: tests
       inward: is tested by
-      description: Links a Story to its Test Case issues (test-documentation touchpoint).
-      used_by: [test-documentation, sprint-testing, shift-left-testing]
+      description: |
+        Coverage edge — a Story is tested by a Test / Test Plan / Test Execution
+        artifact. The canonical Story↔test-artifact traceability link.
+      fallback: relates
+      used_by:
+        - sprint-testing
+        - shift-left-testing
+        - test-documentation
+        - regression-testing
 
     problem_incident:
       name: Problem/Incident
-      outward: problem/incident
+      outward: causes
       inward: is caused by
-      description: Links a Story to the Bug filed against it during sprint testing.
-      used_by: [sprint-testing]
+      description: |
+        Causal edge — a Story causes a Bug/Defect found during QA. The workspace
+        link type is named "Problem/Incident"; semantics are causes / is caused by.
+      fallback: relates
+      used_by:
+        - sprint-testing
+        - regression-testing
 
     blocks:
       name: Blocks
       outward: blocks
       inward: is blocked by
-      description: Links a Bug back to the Story it is blocking (QA formal block gate).
+      description: |
+        Blocking edge — an open Bug/Defect/Story/Tech Story/Tech Debt blocks a
+        Story. Created when the defect_reported → blocked QA gate fires.
+      fallback: blocking
+      used_by:
+        - sprint-testing
+        - regression-testing
+
+  optional:
+    relates:
+      name: Relates
+      outward: relates to
+      inward: relates to
+      description: |
+        Symmetric, informational link. Degradation target when a directional type
+        is absent — consumers MUST flag the fallback (direction is lost).
+      fallback: null
+      used_by: [sprint-testing, test-documentation]
+
+    defect:
+      name: Defect
+      outward: created
+      inward: created by
+      description: Alt to problem_incident — a Story created a Defect (Defect link variant).
+      fallback: problem_incident
       used_by: [sprint-testing]
 
     test_design:
       name: Test Design
       outward: designs
       inward: is designed by
-      description: Links an ATP (Story) to its Test Case issues — ATP designs TC (test-documentation touchpoint).
-      used_by: [test-documentation]
+      description: Xray refinement — Test Plan-level design coverage link.
+      fallback: test
+      used_by: [test-documentation, xray-cli]
 
     test_execute:
       name: Test Execute
       outward: executes
       inward: is executed by
-      description: Links an ATR (Story) to its Test Case issues — ATR executes TC (test-documentation touchpoint).
-      used_by: [test-documentation]
+      description: Xray refinement — Test Execution coverage link.
+      fallback: test
+      used_by: [test-documentation, xray-cli, sprint-testing]
 
     test_automation:
       name: Test Automation
       outward: automation test for
       inward: is automated by
-      description: Binds an automated test (KATA ATC) to the manual Test Case it automates — required signal alongside the automated/automation-candidate label flip (test-automation touchpoint).
+      description: Links a manual Test to its automation.
+      fallback: relates
       used_by: [test-automation]
+
+    blocking:
+      name: Blocking
+      outward: blocks
+      inward: is blocked by
+      description: Duplicate of Blocks in this workspace (separate id); fallback for blocks.
+      fallback: blocks
+      used_by: [sprint-testing]
+
+    xray_defect:
+      name: Xray Defect
+      outward: created
+      inward: created by
+      description: Xray-managed defect creation link.
+      fallback: defect
+      used_by: [xray-cli, sprint-testing]
 
 # Issue types (`work_types`) plus the canonical statuses + transitions the
 # methodology requires per work type. Validated by `bun run jira:check` against
@@ -292,8 +384,10 @@ link_types:
 # discovered by the sync.
 work_types:
   story:
-    jira_issue_type: Historia
+    jira_issue_type: Story
     description: User story / feature work item
+    sync: default
+    content: split
     required_statuses:
       backlog: { description: Initial state for a freshly created story }
       shift_left_qa: { description: Story under early QA review (shift-left quality check) }
@@ -392,12 +486,11 @@ work_types:
 
   bug:
     jira_issue_type: Bug
-    # This workspace's issue type id 10020 is currently displayed as "Error" in Jira
-    # (renamed from "Bug"; jira-workflows.json still shows the pre-rename name). Declared
-    # here so the sync matches issues under either display name until the catalog is
-    # regenerated with `bun run jira:sync-workflows`.
-    jira_issue_type_aliases: [Error]
     description: Defect / bug work item
+    sync: default
+    coverable: true
+    content: single
+    local_dir: bugs
     required_statuses:
       open: { description: Newly reported bug awaiting triage }
       in_progress: { description: Developer actively fixing }
@@ -453,6 +546,8 @@ work_types:
   test_case:
     jira_issue_type: Test
     description: Test case (TC) work item
+    sync: never
+    local_dir: tests
     required_statuses:
       draft: { description: 'Just created, not yet designed' }
       in_design: { description: Test scenario being authored }
@@ -528,9 +623,16 @@ work_types:
       recover: { from: deprecated, to: draft, description: Restore a deprecated TC back to draft }
     used_by: [test-documentation, test-automation]
 
+  # ---- Registry-only types (coverage sync). Workflows (statuses/transitions) are
+  # resolved by `bun run jira:sync-workflows` per workspace when these types exist;
+  # the keys below drive `sync-jira-issues.ts` coverage routing. ----
   epic:
     jira_issue_type: Epic
-    description: Epic / feature container (UPEX Epic Workflow)
+    description: Epic / feature container (holds child stories)
+    sync: default
+    container: true
+    content: split
+    local_dir: epics
     required_statuses:
       backlog: { description: Newly created epic awaiting planning }
       planning: { description: Epic being planned / scoped (default landing state after creation) }
@@ -543,17 +645,21 @@ work_types:
         { from: planning, to: in_progress, description: 'Planning done, epic work begins' }
       complete: { from: in_progress, to: done, description: Epic finished }
       aborted: { from: any, to: aborted, description: Cancel the epic (global transition) }
-    used_by: [product-management/epic-creation, sprint-development]
 
   defect:
     jira_issue_type: Defect
-    description: Defect work item (UPEX Bug/Defect lifecycle — identical workflow to `bug`)
+    description: Defect found during QA of a coverable issue (story / bug / etc.)
+    sync: discovery
+    coverable: true
+    content: single
+    local_dir: defects
+    defect_link_types: [problem_incident, blocks, blocking, defect, xray_defect]
     required_statuses:
       open: { description: Newly reported defect awaiting triage }
       in_progress: { description: Developer actively fixing }
       in_review: { description: Pull request open }
       ready_for_qa: { description: Fix deployed; defect ready to retest }
-      closed: { description: "Defect verified fixed (terminal 'verified')" }
+      closed: { description: Defect verified fixed (terminal) }
       deferred: { description: Defect accepted but postponed; resumable via resume_fix }
       cannot_reproduce: { description: Defect closed because the team cannot reproduce (terminal) }
       duplicated: { description: Defect closed as duplicate of another (terminal) }
@@ -575,12 +681,12 @@ work_types:
       fixed_and_deployed:
         from: in_review
         to: ready_for_qa
-        description: 'PR merged & deployed; defect ready to retest'
+        description: PR merged and deployed; defect ready to retest
 
       retest_passed:
         from: ready_for_qa
         to: closed
-        description: "QA verifies the fix (canonical 'Tested / VERIFIED' transition for defects)"
+        description: QA verifies the fix (canonical Tested transition for defects)
 
       re_open:
         from: any
@@ -594,11 +700,15 @@ work_types:
 
       resume_fix: { from: deferred, to: in_progress, description: Resume work on a deferred defect }
       aborted: { from: any, to: aborted, description: Abandon the defect (global transition) }
-    used_by: [acli, sprint-development]
 
   improvement:
     jira_issue_type: Improvement
-    description: Improvement / enhancement work item (UPEX Bug/Defect lifecycle — identical workflow to `bug`)
+    description: Improvement / enhancement work item
+    sync: optional
+    recommended: true
+    coverable: true
+    content: single
+    local_dir: improvements
     required_statuses:
       open: { description: Newly reported improvement awaiting triage }
       in_progress: { description: Developer actively working }
@@ -628,7 +738,7 @@ work_types:
       fixed_and_deployed:
         from: in_review
         to: ready_for_qa
-        description: 'PR merged & deployed; improvement ready to verify'
+        description: PR merged and deployed; improvement ready to verify
 
       retest_passed:
         from: ready_for_qa
@@ -648,15 +758,15 @@ work_types:
       resume_fix:
         { from: deferred, to: in_progress, description: Resume work on a deferred improvement }
       aborted: { from: any, to: aborted, description: Abandon the improvement (global transition) }
-    used_by: [acli, sprint-development, product-management]
 
   tech_story:
     jira_issue_type: Tech Story
-    description: |
-      Technical story (UPEX Tech Task/Debt workflow — identical to `tech_debt`).
-      NOTE: the `🚀` status (id 10021) and the `✅` / `Auto-Deploy` transitions
-      slugify to empty and are NOT addressable as canonical slugs — the sync
-      captures them only as discovered entries. Do not declare them as required.
+    description: Technical story (same coverage shape as a user story)
+    sync: optional
+    recommended: true
+    coverable: true
+    content: auto
+    local_dir: tech-stories
     required_statuses:
       to_do: { description: Newly created tech story awaiting pickup }
       in_progress: { description: Developer actively working }
@@ -685,15 +795,15 @@ work_types:
       back_from_automated:
         { from: automated, to: in_review, description: Re-open automated work for review }
       recovered: { from: aborted, to: to_do, description: Restore an aborted item back to To Do }
-    used_by: [sprint-development]
 
   tech_debt:
     jira_issue_type: Tech Debt
-    description: |
-      Technical debt (UPEX Tech Task/Debt workflow — identical to `tech_story`).
-      NOTE: the `🚀` status (id 10021) and the `✅` / `Auto-Deploy` transitions
-      slugify to empty and are NOT addressable as canonical slugs — the sync
-      captures them only as discovered entries. Do not declare them as required.
+    description: Technical debt work item (coverable like a story)
+    sync: optional
+    recommended: true
+    coverable: true
+    content: auto
+    local_dir: tech-debts
     required_statuses:
       to_do: { description: Newly created tech debt item awaiting pickup }
       in_progress: { description: Developer actively working }
@@ -722,43 +832,114 @@ work_types:
       back_from_automated:
         { from: automated, to: in_review, description: Re-open automated work for review }
       recovered: { from: aborted, to: to_do, description: Restore an aborted item back to To Do }
-    used_by: [sprint-development]
 
   test_plan:
     jira_issue_type: Test Plan
-    description: Xray Test Plan — holds the ATP body in its description (role atp)
+    description: |
+      Xray Test Plan — holds the ATP body in its description (role atp). Altitude guard
+      (sync-jira-issues): only a Plan titled `ATP:*` syncs as a Story's acceptance-test-plan.md;
+      `FTP:*` / `STP:*` Plans are higher ladder altitudes and are skipped with an info line.
+      No `MTP:*` guard: the Master Test Plan is an Epic, never a Test Plan (defect-management
+      doctrine Part 4), so no Plan can legitimately carry that prefix. Unprefixed titles keep
+      the legacy behavior (any linked Plan counts). Higher altitudes still MATERIALIZE — the
+      QA-process-epic sweep writes them to test-plans/ as FTP-/STP-/ATP-<KEY>-<slug>.md
+      (non-conforming titles fall back to TESTPLAN-).
     sync: discovery
     role: atp
     content: description
     local_dir: test-plans
+    # Lifecycle: the ATP / STP / FTP / RTP all ride this workflow. Moved by
+    # /sprint-testing (ATP: Planning -> Reporting; STP: Session Start -> sprint close),
+    # /sprint-testing feature-test-planning (FTP) and /test-documentation (RTP, which
+    # stops at `ready` — it is long-lived and never completed). Doctrine:
+    # agentic-qa-core/references/artifact-lifecycle.md
+    required_statuses:
+      planning: { description: 'Plan created, body not yet designed (Create lands here)' }
+      ready: { description: Plan designed and ready to execute against }
+      completed: { description: Plan closed out after its results are in (terminal) }
+    required_transitions:
+      designed: { from: planning, to: ready, description: Plan body authored and scope agreed }
+      complete: { from: ready, to: completed, description: Plan closed out once results are in }
 
   test_execution:
     jira_issue_type: Test Execution
-    description: Xray Test Execution — holds the ATR body in its description (role atr)
+    description: |
+      Xray Test Execution — holds the ATR body in its description (role atr). Altitude guard
+      (sync-jira-issues): only an Execution titled `ATR:*` / `ReTest:*` syncs as a Story's
+      acceptance-test-results.md; `STR:*` / `FTR:*` Executions are skipped with an info line
+      (`FTR` is a legacy guard — the rung was cut, the skip stays for pre-migration data).
+      Unprefixed titles keep the legacy behavior (any linked Execution counts). Higher
+      altitudes still MATERIALIZE — the QA-process-epic sweep writes them to test-executions/
+      as STR-/ATR-<KEY>-<slug>.md (non-conforming titles fall back to TESTEXEC-).
     sync: discovery
     role: atr
     content: description
     local_dir: test-executions
+    # Lifecycle: the ATR and the STR both ride this workflow. Moved by /sprint-testing
+    # Reporting (ATR) and by whoever closes the sprint (STR — /sprint-testing batch close
+    # or /regression-testing). Doctrine: agentic-qa-core/references/artifact-lifecycle.md
+    required_statuses:
+      active: { description: 'Execution open, runs still being recorded (Create lands here)' }
+      close: { description: Execution closed after every run status is recorded (terminal) }
+    required_transitions:
+      complete:
+        { from: active, to: close, description: All run statuses recorded — close the Execution }
 
   re_test_execution:
     jira_issue_type: Re-Test Execution
-    description: Xray Re-Test Execution (subtask) — retest ATR (role atr)
+    description: |
+      Xray Re-Test Execution (subtask) — retest ATR (role atr, same altitude guard as
+      test_execution). Files as RETEST-<KEY>-<slug>.md when titled `ReTest:*`, else RETESTEXEC-.
     sync: discovery
     role: atr
     content: description
     local_dir: test-executions
+    # Lifecycle: moved by /sprint-testing bug retest, once the repro Test's run is
+    # recorded PASSED/FAILED. Optional in practice — a project with no Re-Test Execution
+    # work type records the retest in a plain Test Execution instead.
+    # Doctrine: agentic-qa-core/references/artifact-lifecycle.md
+    required_statuses:
+      active: { description: 'Retest open, repro run not yet recorded (Create lands here)' }
+      close: { description: Retest closed after the repro run is recorded (terminal) }
+    required_transitions:
+      complete:
+        { from: active, to: close, description: Repro run recorded — close the Re-Test Execution }
 
   test_set:
     jira_issue_type: Test Set
-    description: Xray Test Set — grouping of tests (not synced)
-    sync: never
+    description: |
+      Xray Test Set — grouping of tests. A Set titled `ATS:*` linked to a coverable issue feeds
+      cascade rung 1 of sync-jira-issues: its member Tests (Xray GraphQL membership, or TC→ATS
+      Jira links in Modality jira-native) materialize under that issue's test-cases/.
+      Feature-level `TS:*` Sets stay ignored by the cascade.
+      `sync: discovery` — reachable by an explicit `get <KEY>` / `jql`, and swept from the QA
+      Test Artifacts epic, but never by a plain type sweep. It was `never` while the code wrote
+      it anyway on `get`: declaration and behavior now agree (`sync: never` is honored).
+    sync: discovery
     local_dir: test-sets
+    # Lifecycle: the Story's ATS is closed by /sprint-testing Reporting once its
+    # membership is final. A feature-level `TS:*` Set stays `designing` for the life of
+    # the feature and closes only with its Epic.
+    # Doctrine: agentic-qa-core/references/artifact-lifecycle.md
+    required_statuses:
+      designing: { description: Set still accepting members (Create lands here) }
+      close: { description: Membership final — Set closed (terminal) }
+    required_transitions:
+      done: { from: designing, to: close, description: Membership final — close the Set }
 
   precondition:
     jira_issue_type: Precondition
-    description: Xray Precondition — reusable test prerequisite (not synced)
-    sync: never
+    description: |
+      Xray Precondition — reusable test prerequisite. `sync: discovery` — reachable by an
+      explicit `get <KEY>` / `jql`, and swept from the QA Test Artifacts epic, but never by a
+      plain type sweep. Was `never` while the code wrote it anyway on `get`; the two now agree.
+    sync: discovery
     local_dir: preconditions
+    # Lifecycle: none. The Precondition workflow exposes `create` and NOTHING else, so a
+    # Precondition lives and dies `active` — that is correct, not a missing transition.
+    # Doctrine: agentic-qa-core/references/artifact-lifecycle.md
+    required_statuses:
+      active: { description: Precondition in use (Create lands here; the only status) }
 
   subtask:
     # `A | B | C` = ordered alternatives; the first one the project actually has
@@ -774,3 +955,16 @@ work_types:
     jira_issue_type: Sub-task | Task | Subtarea
     description: Generic subtask under a Story — tracking-only, never synced as its own folder
     sync: never
+    # Lifecycle: moved by /shift-left-testing — Phase 1 creates the `[QA] Shift-Left Review`
+    # subtask, the handoff closes it after the exhaustive session annotations are posted on
+    # it. Optional in practice: a project with no subtask-level type skips both steps with a
+    # warning. NOTE the status NAMES here are `ACTIVE` / `Close`, not `In Progress` / `Done`.
+    # Doctrine: agentic-qa-core/references/artifact-lifecycle.md
+    required_statuses:
+      active: { description: 'Subtask open, QA working it (Create lands here)' }
+      close: { description: Subtask closed at hand-off (terminal) }
+    required_transitions:
+      complete:
+        { from: active, to: close, description: Annotations posted — close the tracking subtask }
+      reactive:
+        { from: close, to: active, description: Re-open a closed tracking subtask (refresh run) }
