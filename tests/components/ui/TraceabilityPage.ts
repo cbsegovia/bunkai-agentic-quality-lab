@@ -78,6 +78,39 @@ export class TraceabilityPage extends UiBase {
     await this.page.goto(this.buildUrl(`/projects/${args.projectSlug}/traceability?story=${args.userStoryId}`));
   }
 
+  /**
+   * Discover the shared "full coverage" BK-45 fixture story inside the given
+   * project, by reading the module/story tree embedded in the project page's
+   * own hydration payload (the app has no project-search or list-stories API
+   * — see BK-990). Throws with the fixture project's URL if no story matches,
+   * so a renamed/removed fixture fails loud and fixable instead of a silent
+   * 404 against a stale hardcoded UUID.
+   */
+  @step
+  async discoverFullCoverageStoryId(projectSlug: string): Promise<string> {
+    const projectUrl = this.buildUrl(`/projects/${projectSlug}`);
+    await this.page.goto(projectUrl);
+    const html = await this.page.content();
+
+    // Matches the {"id":"...","module_id":"...","title":"..."} story records
+    // the app embeds for its own explorer tree, inside a <script> tag as a
+    // JS string literal — quotes arrive backslash-escaped (\"), not plain
+    // (see BK-990 investigation).
+    const storyPattern = /\\"id\\":\\"([0-9a-f-]{36})\\",\\"module_id\\":\\"[0-9a-f-]{36}\\",\\"title\\":\\"([^"\\]*)\\"/g;
+    for (const match of html.matchAll(storyPattern)) {
+      if (match[2].includes('full coverage story for BK-45 automation')) {
+        return match[1];
+      }
+    }
+
+    throw new Error(
+      'BK-990: could not find the "full coverage" BK-45 fixture story in '
+      + `${projectUrl} — it may have been renamed, archived, or removed. `
+      + 'Check the project\'s story tree and update the title match in '
+      + 'TraceabilityPage.discoverFullCoverageStoryId if it was intentionally renamed.',
+    );
+  }
+
   // ============================================
   // ATCs - Complete Test Cases
   // ============================================
