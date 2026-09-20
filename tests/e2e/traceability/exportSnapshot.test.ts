@@ -57,14 +57,29 @@ test.describe('BK-50: Traceability export snapshot', { tag: ['@critical'] }, () 
     const mutatedTitle = `${ui.data.createTestId('bk333-mutated')} — DO NOT SAVE`;
 
     await ui.traceability.goto({ projectSlug: FIXTURE_PROJECT_SLUG, userStoryId: fixtureStoryId });
-    const originalTitle = await ui.traceability.page.locator('h1').first().textContent() ?? '';
+    // The live traceability screen has no <h1> — the story title renders as a
+    // styled <span> inside [data-testid="traceability-story-head"] (confirmed
+    // live during BK-990 follow-up). The exported document DOES use a real
+    // <h1>; that's a different page and SnapshotDocumentPage's own h1 check
+    // is correct as-is.
+    const originalTitle = await ui.traceability.page
+      .locator('[data-testid="traceability-story-head"] span')
+      .first()
+      .textContent() ?? '';
+
+    // T0 MUST be exported before mutateStoryTitleAndRestore runs: that helper
+    // mutates the title BEFORE invoking its `run` closure (see
+    // UserStoryApi.mutateStoryTitleAndRestore), and the export button always
+    // reads the CURRENT live title at click time, not a stale client-side
+    // render — exporting T0 inside `run` was capturing the already-mutated
+    // title, defeating the whole T0-vs-T1 comparison (confirmed live during
+    // BK-990 follow-up: the "T0" file showed the mutated title).
+    await ui.traceability.exportSnapshot(t0Path);
 
     await api.userStory.mutateStoryTitleAndRestore({
       storyId: fixtureStoryId,
       mutatedTitle,
       run: async () => {
-        await ui.traceability.exportSnapshot(t0Path);
-
         await ui.traceability.goto({ projectSlug: FIXTURE_PROJECT_SLUG, userStoryId: fixtureStoryId });
         await ui.traceability.exportSnapshot(t1Path);
       },

@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-09-19T02:08:34.699Z",
+  "generatedAt": "2026-09-20T00:15:38.316Z",
   "components": {
     "api": [
       {
@@ -144,12 +144,12 @@
           {
             "id": "BK-332",
             "method": "openOffline",
-            "line": 70
+            "line": 72
           },
           {
             "id": "BK-333",
             "method": "expectSnapshotUnchangedAfterMutation",
-            "line": 109
+            "line": 117
           }
         ]
       },
@@ -171,7 +171,7 @@
           {
             "id": "BK-336",
             "method": "expectNoShareAffordance",
-            "line": 903
+            "line": 911
           },
           {
             "id": "BK-445",
@@ -181,32 +181,32 @@
           {
             "id": "BK-446",
             "method": "expectZeroAcAuthoringGap",
-            "line": 561
+            "line": 569
           },
           {
             "id": "BK-448",
             "method": "expectNonDisclosureNotFound",
-            "line": 369
+            "line": 377
           },
           {
             "id": "BK-449",
             "method": "expectArchivedAcExcluded",
-            "line": 448
+            "line": 456
           },
           {
             "id": "BK-450",
             "method": "expectGhostAtcExcluded",
-            "line": 490
+            "line": 498
           },
           {
             "id": "BK-451",
             "method": "expectArchivedStoryRendersReadOnly",
-            "line": 531
+            "line": 539
           },
           {
             "id": "BK-452",
             "method": "expectDraftStoryHasNoLifecycleGate",
-            "line": 409
+            "line": 417
           },
           {
             "id": "BK-453",
@@ -216,7 +216,7 @@
           {
             "id": "BK-455",
             "method": "expectAtcRepeatsUnderEachBoundAc",
-            "line": 683
+            "line": 691
           },
           {
             "id": "BK-456",
@@ -226,42 +226,42 @@
           {
             "id": "BK-457",
             "method": "expectRunStatusPillMatchesTerminalStatus",
-            "line": 714
+            "line": 722
           },
           {
             "id": "BK-458",
             "method": "expectInFlightRunNotMisleading",
-            "line": 745
+            "line": 753
           },
           {
             "id": "BK-459",
             "method": "expectDefectsOrderedNewestFirst",
-            "line": 782
+            "line": 790
           },
           {
             "id": "BK-460",
             "method": "expectSharedRunHidesForeignDefect",
-            "line": 818
+            "line": 826
           },
           {
             "id": "BK-461",
             "method": "expectLayerGapCopy",
-            "line": 867
+            "line": 875
           },
           {
             "id": "BK-462",
             "method": "expectUncoveredStripForZeroAtcAc",
-            "line": 613
+            "line": 621
           },
           {
             "id": "BK-463",
             "method": "expectMixedCoverageRendersSideBySide",
-            "line": 647
+            "line": 655
           },
           {
             "id": "BK-464",
             "method": "expectZeroCoverageBannerRenders",
-            "line": 586
+            "line": 594
           }
         ]
       }

@@ -309,7 +309,15 @@ export class TraceabilityPage extends UiBase {
       throw new Error('expectAnonymousRedirectToLogin requires a browser-backed page context.');
     }
 
-    const anonymousContext = await browser.newContext();
+    // `storageState: undefined` is required, not cosmetic: the `browser` fixture
+    // here is the "e2e" project's own browser, and that project sets
+    // `use.storageState` to the authenticated qa3 session — a bare
+    // `browser.newContext()` silently INHERITS it, so the "anonymous" caller
+    // was actually still authenticated as qa3 (confirmed via BK-990 follow-up
+    // investigation: `anonymousContext.cookies()` carried the qa3 Supabase
+    // auth cookie). Explicitly clearing it is the only way to get a genuinely
+    // logged-out context from this browser instance.
+    const anonymousContext = await browser.newContext({ storageState: undefined });
     try {
       const anonymousPage = await anonymousContext.newPage();
       await anonymousPage.goto(this.buildUrl(path));
@@ -904,7 +912,12 @@ export class TraceabilityPage extends UiBase {
   async expectNoShareAffordance(): Promise<void> {
     await expect(this.page.locator('[data-testid="traceability-export-button"]')).toBeVisible();
 
-    const shareAffordanceCount = await this.page.locator(
+    // Scoped to the chain-view panel itself, not `this.page` as a whole: an
+    // unscoped `a:has-text("Share")` false-matched the sidebar explorer link
+    // for the unrelated fixture story "BK-460 shared Run across two stories"
+    // (substring match on "shared") — confirmed live during BK-990 follow-up.
+    const chainView = this.page.locator('[data-testid="traceability-chain-view"]');
+    const shareAffordanceCount = await chainView.locator(
       '[data-testid*="share" i], [data-testid*="publish" i], [data-testid*="copy-link" i], '
       + '[data-testid*="public-link" i], button:has-text("Share"), button:has-text("Publish"), a:has-text("Share")',
     ).count();

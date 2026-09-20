@@ -7,9 +7,11 @@
  * and route-abort mechanics into a component that otherwise only ever talks
  * to the live app (BK-50 spec.md §3 — "its page is the exported document").
  *
- * Locators: the exported document mirrors the on-screen chain markup
- * (`data-testid="traceability-chain-view"` carried over from
- * TraceabilityPage — the export renderer reuses the same component tree).
+ * Locators: the exported document is NOT a DOM copy of the live app — no
+ * `data-testid` carries over. It's a separate, purpose-built static render
+ * with its own semantic classes (`.snap-ac`, `.snap-table`, `.snap-footer`),
+ * confirmed by inspecting a real downloaded snapshot (BK-990 follow-up,
+ * 2026-09-19). `h1` and `footer` ARE real elements here.
  */
 
 import type { Browser, BrowserContext } from '@playwright/test';
@@ -85,7 +87,13 @@ export class SnapshotDocumentPage extends UiBase {
       const page = await context.newPage();
       await page.goto(this.toFileUrl(filePath));
 
-      await expect(page.locator('[data-testid="traceability-chain-view"]')).toBeVisible({ timeout: 10000 });
+      // The exported document is NOT a DOM copy of the live app (no
+      // data-testid carries over) — it's a purpose-built static render with
+      // its own semantic classes (`.snap-ac`, `.snap-table`, `.snap-footer`),
+      // confirmed by inspecting a real downloaded snapshot during BK-990
+      // follow-up. `.snap-table` is the chain content itself; h1 and footer
+      // ARE real elements here (unlike the live app's title, which is a span).
+      await expect(page.locator('.snap-table')).toBeVisible({ timeout: 10000 });
       await expect(page.locator('h1').first()).toBeVisible();
       await expect(page.locator('footer')).toBeVisible();
 
