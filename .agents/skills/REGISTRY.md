@@ -1,6 +1,6 @@
 # Skill Registry (auto-generated)
 
-> Generated: `2026-09-16T15:13:21.023Z`
+> Generated: `2026-09-23T12:43:02.889Z`
 > Generator: `bun scripts/build-skill-registry.ts`
 > Protocol: `.agents/skills/agentic-qa-core/references/skill-resolver.md`
 
@@ -8,7 +8,7 @@ This file is the per-session compact-rules cache for the Skill Resolver protocol
 The orchestrator copies one or more `## Skill: <slug>` blocks below into every subagent briefing under `## Project Standards (auto-resolved)`.
 Subagents trust those compact rules and only read the full SKILL.md when explicitly instructed.
 
-Skills indexed: 22
+Skills indexed: 24
 
 ---
 ## Skill: acli
@@ -23,6 +23,8 @@ Skills indexed: 22
 - DO NOT: hand-author raw ADF JSON, and do not pass Markdown to a rich-text flag — the CLI never converts it and stores the literal characters. Author in Markdown, convert with `scripts/md-to-adf.ts`, pass the ADF.
 - DO: let the converter's validation gate run on every ADF document before publishing, and round-trip read the field after writing. The gate catches node-level errors; only the read-back catches Jira's silent server-side coercion.
 - DO NOT: assume `workitem edit` takes custom-field values. It hard-rejects every shape with exit 1; editing a custom field on an EXISTING item works only through the REST PUT path.
+- DO NOT: expect `workitem edit` to set an issue's COMPONENTS either. There is no flag and no `--from-json` key, so the edit succeeds while leaving components untouched and says nothing. Set them at create time, or change them through the same REST PUT path as custom fields.
+- DO NOT: copy an example out of the vendor's own `--help`. Several omit the subcommand the flags actually live on (`workitem comment --key …` instead of `workitem comment create --key …`) and fail with `unknown flag`. The forms in this skill's references are the tested ones.
 - DO NOT: hardcode a `customfield_NNNNN` id in a script or in generated output. Resolve it through the host project's slug catalog — ids differ per workspace, slugs travel.
 - DO NOT: read the Atlassian host from an environment variable. It lives in `.agents/project.yaml` under `issue_tracker.atlassian_url` and is resolved through the accessor; a stale inherited copy once pointed the sync scripts at a dead site.
 - WHEN creating an issue link: `--out` / `--in` are empirically INVERTED against Jira's semantics — `--out` takes the prerequisite, `--in` the dependent. Verify the direction by listing the link afterwards, and recreate with swapped flags if it landed backwards.
@@ -32,7 +34,7 @@ Skills indexed: 22
 
 **Read full SKILL.md when**: composing a specific command, publishing rich text, running the REST PUT workaround, or working any surface outside Jira work items.
 
-> Source: `.agents\skills\acli\SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents/skills/acli/SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -48,7 +50,7 @@ Skills indexed: 22
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
-> Source: `.agents\skills\adapt-framework\SKILL.md` · phase: `unknown` · extraction strategy: B
+> Source: `.agents/skills/adapt-framework/SKILL.md` · phase: `unknown` · extraction strategy: B
 
 ---
 
@@ -70,7 +72,7 @@ Skills indexed: 22
 
 **Read full SKILL.md when**: you need the full table of hosted references and who cites each one, the deck-hosting details, or the exact `## Dependencies` block shape to add to a skill.
 
-> Source: `.agents\skills\agentic-qa-core\SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents/skills/agentic-qa-core/SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -84,6 +86,7 @@ Skills indexed: 22
 - WHEN someone is lost or asks how a skill works: suspend the compressed / caveman register for the whole explanation — full sentences, warm tone, and each technical term defined the first time it appears. Resume the normal register once they are oriented.
 - DO: mirror the user's language in the explanation. The visual decks ship in Spanish only (technical terms stay English) — say so before opening one for an English speaker.
 - WHEN the goal is unclear: ask ONE question first (testing a ticket, or understanding the whole flow?). Never dump all six stages on someone who asked about one.
+- WHEN someone asks about running several sessions at once ("parallelize the sprint", "one session per story", "orquestar", "lanza workers"): explain the two executors in plain words — a one-shot subagent lives inside the current turn and is the default for almost everything, a supervised worker is a persistent session you keep talking to — then hand off to `/orca-orchestration`. Its deck is `packages/decks/orca-orchestration/how-it-works.es.html`.
 - DO: explain the concept in plain words, and why it matters, BEFORE any command, flag, or file path.
 - DO NOT: open a how-it-works deck without asking — it launches the user's default browser. Open exactly ONE, then let them come back with questions before offering the next.
 - WHEN opening a deck: prefer the published GitHub Pages URL over the local file, because a project scaffolded from this boilerplate may not carry the HTML. Use the local copy only offline or on explicit request.
@@ -94,7 +97,7 @@ Skills indexed: 22
 
 **Read full SKILL.md when**: walking the full 4-phase new-project setup, listing env vars or MCPs in detail, or answering which deck covers a given topic.
 
-> Source: `.agents\skills\agentic-qa-onboard\SKILL.md` · phase: `bootstrap` · extraction strategy: A
+> Source: `.agents/skills/agentic-qa-onboard/SKILL.md` · phase: `bootstrap` · extraction strategy: A
 
 ---
 
@@ -116,7 +119,7 @@ Skills indexed: 22
 
 **Read full SKILL.md when**: building the annotation HTML, choosing shape types, or handling a case the local render cannot cover (e.g. a photo of physical signage that would need anonymization).
 
-> Source: `.agents\skills\bug-screenshot-annotation\SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents/skills/bug-screenshot-annotation/SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -141,7 +144,7 @@ Skills indexed: 22
 
 **Read full SKILL.md when**: writing the plan artifact, batching Code-phase tasks, resuming an interrupted session, or reading the ALLOWED/FORBIDDEN path tables themselves.
 
-> Source: `.agents\skills\framework-development\SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents/skills/framework-development/SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -158,6 +161,7 @@ Skills indexed: 22
 - DO NOT: run a repo-wide discard (`git restore .`, `git checkout -- .`, `git reset --hard`, untargeted `git stash`, `git clean -f`) — concurrent sessions may share this working tree. Discard only explicit paths this session modified; unclear ownership means stop and ask.
 - DO NOT: `git add -A` or `git add .`. List explicit paths, so a secret or another session's work cannot ride along.
 - DO: keep one commit to one responsibility, in conventional format (`{type}({ISSUE-KEY}): {description}`). Commit messages, branch names and PR bodies are English and carry NO AI attribution.
+- DO: close EVERY commit message, in every strategy, with the two forensic trailers `Worktree: <name|primary>` then `Session: <label>`, copied from the `AGENT IDENTITY:` line in session context (`unknown` when a value cannot be resolved). They are forensics, not attribution — a harness-branded trailer (`Claude-Session:`, an AI `Co-Authored-By:`) stays forbidden.
 - WHEN a pre-commit hook rejects a commit: stop, fix the underlying issue, and create a NEW commit. Never `--amend` the rejected one.
 - DO: propose every branch name, commit set, and PR body and wait for an explicit OK before executing.
 - DO: stop at PR creation — merging is the user's next step, never automatic. If the `gh` transport is missing or unauthenticated, surface the blocker instead of implying a PR was opened.
@@ -167,7 +171,7 @@ Skills indexed: 22
 
 **Read full SKILL.md when**: running Strategy Setup, resolving a specific conflict type, picking a base branch or branch prefix for an unfamiliar strategy, or setting up an isolated worktree.
 
-> Source: `.agents\skills\git-flow-master\SKILL.md` · phase: `implementation` · extraction strategy: A
+> Source: `.agents/skills/git-flow-master/SKILL.md` · phase: `implementation` · extraction strategy: A
 
 ---
 
@@ -190,7 +194,7 @@ Skills indexed: 22
 
 **Read full SKILL.md when**: the mode is ambiguous, a dry-run diff or migration audit looks wrong, or you need the selected reference's step-by-step phases and verification list.
 
-> Source: `.agents\skills\jira-administration\SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents/skills/jira-administration/SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -220,7 +224,37 @@ Skills indexed: 22
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
-> Source: `.agents\skills\judgment-day\SKILL.md` · phase: `unknown` · extraction strategy: B
+> Source: `.agents/skills/judgment-day/SKILL.md` · phase: `unknown` · extraction strategy: B
+
+---
+
+## Skill: orca-orchestration
+
+**Purpose**: Multi-session agent orchestration for this repo: one conductor session coordinating a fleet of persistent worker sessions (one per story,...
+
+**Compact Rules**:
+- DO gate on the BINARY plus a reachable RUNTIME, never on "is a vendor skill installed". Three states: A no binary, B binary with unreachable runtime, C ready. In a workflow skill, states A and B are TOTAL SILENCE: never name the orchestrator, never list it as a prerequisite, never mention it in an ATR or a blocked-token sweep. The one-line install recommendation belongs to THIS skill and fires only because the user asked for orchestration.
+- DO write the launch file ALWAYS, with or without a runtime, and keep the PROMPT identical on both paths, byte for byte, opening with `/<workflow-skill> <KEY> fleet worker` and carrying the no-stopping sentence. The launch line itself is for a human to paste or for a deliberately unsupervised terminal; the prompt is the payload both paths share, and a paraphrased prompt is the exact failure this rule exists to prevent.
+- DO NOT copy the vendor command grammar into this repo. LOAD the stubs listed in `orchestration.orchestrator_skills` (`.agents/project.yaml`) alongside this skill — conductor AND worker, they are about 2k tokens for the pair — and ask the binary only for the DEEP topics a stub points at. A copied grammar goes stale in silence on the next release; a grammar nobody loaded produces invented flags.
+- DO treat one-shot subagents as the DEFAULT executor (AGENTS.md §3, unchanged) and a supervised worker as the declared exception: persistent, addressable, owns a scope end to end. The conductor still uses subagents for its OWN reads.
+- DO NOT allow periodic heartbeats, even though the injected preamble asks for them. Every heartbeat wakes the conductor to read the word "alive". A worker sends exactly three things: `worker_done` (once, with an explicit outcome), `ask` (blocking), `escalation`. The brief must prohibit heartbeats in writing.
+- DO NOT use the harness's own agent-to-agent messaging or user-question tools from a worker: from an isolated worktree the conductor is not addressable and nobody is watching a user prompt. The channel is the orchestration mailbox, and a question that does not block goes out as a message while the worker keeps going on everything that does not depend on the answer.
+- DO treat the channel as an ASSIGNMENT, not a preference: `orchestration send` carries every message between sessions and is byte-intact; anything longer than a couple of sentences goes in a FILE with a one-line pointer; `terminal send` drives a terminal (commands, CLI calls, harness slash-commands, keystrokes) and nothing else, because it truncates silently, keeps only the TAIL and still reports success. The one exception is the launch handoff prompt of a supervised worker, which has no argv to travel in: keep it short and point it at a file. And read every send result as a statement about the CALL, never about the outcome.
+- DO acknowledge every mailbox batch, verified, in the SAME command that re-arms the wait, and never inside a compound command whose exit code can be swallowed. An unacknowledged batch replays forever and hides everything queued behind it, and the runtime does not re-notify. Roll the wait in windows of at most 540 s, because the harness kills a foreground command at 600 s. One waiter per Run, never a shell background job, never a self-built monitor: the runtime notifies the conductor on its own.
+- DO launch a supervised worker NATIVELY (the runtime starts the agent: task, worktree, agent, model, effort) and then send its prompt as the immediate next step. A terminal created with our own command line can NEVER be supervised — the runtime recognizes only agents it started, and adoption is refused on a terminal whose agent is demonstrably alive. Custom argv is the human-paste shape and the deliberately-unsupervised shape, nothing more.
+- DO verify credentials on the worker's own screen before dispatching work to it. The native launch has no argv, so the environment file reaches it only through a per-machine direnv hook in the runtime's interactive shell: without it the worker starts clean, unsupervisedly broken, and fails much later at its first authenticated call.
+- DO tell every worker, in the prompt AND in the brief, to run every stage without returning to the prompt until `worker_done` is sent: a stage boundary is not a checkpoint. And DO name the one `ask` that is mandatory: when a worker's own measurement contradicts a conductor instruction, it stops and asks with both readings and the evidence — never silent compliance, never silent deviation.
+- DO treat create + launch + brief as ONE indivisible operation, and verify a few minutes later that the brief actually landed (a created terminal reports success when the text was DELIVERED, not when it ran). Readiness is not completion.
+- DO close a finished worker in the same turn, and read its cost footer off its screen BEFORE closing: a worker's token and context usage exists nowhere else and dies with the terminal. Release the supervised worker by its dispatch; without a dispatch, COUNT the terminals in that worktree before closing anything, because the stop verb's radius is the whole worktree. Remove a worktree only after the orphan audit, because everything gitignored inside it (env file, evidence, session scope) dies with it.
+- DO pick the topology by what the work writes: manual QA and backlog grooming run as a fleet in the SAME checkout (state lives in the tracker); anything that writes code gets one Orca worktree per worker, because two sessions in one checkout collide on the git index even when they never touch the same file. Never two workers owning the same module.
+- DO declare a claim before touching shared fixture data or a shared credential, with one of three intents (`read` / `write` / `enumerate` — a listing that exposes siblings' entities is never an assertion target). A claim already listed in the brief is PRE-GRANTED: the worker announces it and works. Only a claim discovered mid-run waits, and the conductor arbitrates it: first message wins, it keeps the ledger and broadcasts the grant. Conductor-only operations (login / token minting, schema sync, tracker pull-push) are never delegated.
+- DO provision a fresh worktree BEFORE launching. A missing provisioning step disguises itself as something else: an absent env file reads as "the tool does not exist", absent dependencies as "a broken import", an absent tracker cache as a worker that simply cannot see the story.
+- DO keep `.agents/project.yaml` → `orchestration` as DEFAULTS only (worker cap, agent, model, effort). An explicit user instruction in the conductor session always overrides them for that run; the defaults apply only when the user said nothing.
+- WHEN a commit is produced by any session: the forensic trailers (`Worktree:` then `Session:`) are mandatory and are NOT AI attribution. Canon: `/git-flow-master`.
+
+**Read full SKILL.md when**: starting a fleet cold, arbitrating a claim, choosing a topology, recovering a Run from a previous session, or writing an unattended automation.
+
+> Source: `.agents/skills/orca-orchestration/SKILL.md` · phase: `unknown` · source: frontmatter `compact_rules` (verbatim)
 
 ---
 
@@ -241,7 +275,7 @@ Skills indexed: 22
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
-> Source: `.agents\skills\playwright-best-practices\SKILL.md` · phase: `unknown` · extraction strategy: B
+> Source: `.agents/skills/playwright-best-practices/SKILL.md` · phase: `unknown` · extraction strategy: B
 
 ---
 
@@ -267,7 +301,7 @@ Skills indexed: 22
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
-> Source: `.agents\skills\playwright-cli\SKILL.md` · phase: `unknown` · extraction strategy: B
+> Source: `.agents/skills/playwright-cli/SKILL.md` · phase: `unknown` · extraction strategy: B
 
 ---
 
@@ -292,7 +326,7 @@ Skills indexed: 22
 
 **Read full SKILL.md when**: applying the severity rubric or score weighting, probing an external repo for its doctrine, or drafting the posting flow itself.
 
-> Source: `.agents\skills\pr-review-lead\SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents/skills/pr-review-lead/SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -313,7 +347,7 @@ Skills indexed: 22
 
 **Read full SKILL.md when**: the requested mode is ambiguous, a `refresh-all` chain fails mid-sequence, or you need the selected reference's own analysis steps and validation gate.
 
-> Source: `.agents\skills\project-context\SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents/skills/project-context/SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -339,7 +373,7 @@ Skills indexed: 22
 
 **Read full SKILL.md when**: running any phase's sub-steps, applying a completion gate's content checks, or resolving the pre-`adapt-framework` prerequisite list.
 
-> Source: `.agents\skills\project-discovery\SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents/skills/project-discovery/SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -365,7 +399,7 @@ Skills indexed: 22
 
 **Read full SKILL.md when**: driving the CI commands, applying the GO/CAUTION/NO-GO scoring table, resolving a borderline classification, wiring the TMS artifacts, or writing the report.
 
-> Source: `.agents\skills\regression-testing\SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents/skills/regression-testing/SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -395,7 +429,37 @@ Skills indexed: 22
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
-> Source: `.agents\skills\resend-cli\SKILL.md` · phase: `unknown` · extraction strategy: B
+> Source: `.agents/skills/resend-cli/SKILL.md` · phase: `unknown` · extraction strategy: B
+
+---
+
+## Skill: session-handoff
+
+> ⚠ LOW-CONFIDENCE (extraction strategy B): bullets scraped without context — read the full SKILL.md before relying on any rule below.
+
+**Purpose**: Compact an entire agent session into a handoff document so a NEW session resumes exactly where this one stopped, as if the context window...
+
+**Compact Rules**:
+- the context window is past the owner's threshold (~500k tokens unless the owner names a different one; it is a per-owner judgement about where this model starts degrading, not project configuration, so it stays in the conversation and not in a yaml key)
+- the session is about to end with work still in flight
+- the session is about to do something that will itself consume a large slice of the window (a big harvest, a long file read) and the remaining budget will not cover the work after it
+- the owner asks
+- **Capture.** Walk `.agents/skills/session-handoff/references/capture-contract.md` section by section. Every section is mandatory; a section with nothing in it is written as an explicit `none` line, never omitted. Omission is indistinguishable from forgetting, and the successor cannot tell which happened.
+- **Write.** Fill `.agents/skills/session-handoff/templates/handoff.md` to `.session/handoffs/<session-name>-handoff-NN.md`. Naming contract below.
+- **Launch the successor.** Follow `.agents/skills/session-handoff/references/successor-launch.md`. With a runtime, this session launches it. Without one, this session prints the line and the human pastes it.
+- `.session/` is gitignored. A handoff is worktree-local and disposable by design: it describes one session's state, it is not a project record, and committing it would put a decaying snapshot under version control.
+- `NN` is zero-padded, two digits, starting at `01`, incrementing across the whole lineage. List the directory before choosing; never assume.
+- **The successor's session name is the handoff file's basename without the extension.** That is the entire naming rule, and it makes the lineage readable from the file list alone: `<base>`, then `<base>-handoff-01`, then `<base>-handoff-01-handoff-02`. Long names are the point; a lineage you cannot read is a lineage you cannot audit.
+- A durable fact that outlives the session does not belong in the handoff. It belongs in Engram, in the repo, or in the tracker. The handoff cites it.
+- **Label every claim `measured` or `predicted`.** The predecessor's guesses about what the successor will find are useful and are also the first thing to go stale. A predicted branch stated as fact sends the successor down a path that no longer exists. Measured means: this session ran it and read the output.
+- **Mark perishable state `PERISHABLE`, with the wall-clock time it was measured.** Running workers, open mailboxes, in-flight PRs and live runs decay between writing and reading. The successor's instruction for anything marked perishable is: re-verify before acting, not act then discover.
+- **Perishable beats priority.** If a perishable item needs attention before the priority list, say so in the same line. A successor that follows a stale priority order while a live worker waits has done exactly what the handoff was supposed to prevent.
+- **Ids are copied, never described.** A run id, a dispatch id, a terminal handle, a session id, a PR number, a tracker key, a commit SHA: verbatim, in backticks, in a form that can be pasted. "the worker from earlier" is not an id.
+- (truncated — read full SKILL.md for the rest)
+
+**Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
+
+> Source: `.agents/skills/session-handoff/SKILL.md` · phase: `unknown` · extraction strategy: B
 
 ---
 
@@ -417,7 +481,7 @@ Skills indexed: 22
 
 **Read full SKILL.md when**: running the batch grooming pipeline, writing the per-Story `shift-left-refinement.md`, or handling the PO/Dev handoff.
 
-> Source: `.agents\skills\shift-left-testing\SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents/skills/shift-left-testing/SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -450,13 +514,15 @@ Skills indexed: 22
 - Bug retest (Modality jira-xray): ONE repro `Test` by default, created at fix-verification time (Stage 2), linked Bug↔Test via the `test` slug and executed in the retest Execution (`ReTest: {BUG_KEY}: {summary}`); 1:N only with a written test-design justification. Modality jira-native: no in-sprint TCs (the bug is the immediate retest case) — persistent-Test decisions defer to Stage 4.
 - STP find-or-create fires on the sprint's FIRST ticket: `STP: Sprint#{N}: {objective}` (Test Plan item, parent: QA Master Test Plan; a LIVING planner — append each tested ticket, keep progress current). The sprint recap Execution `STR: Sprint#{N}: Regression Testing` (parent: QA Test Artifacts) is created at sprint close.
 - Two modes, ASKED at Session Start, never inferred: **sprint-wide** (the whole sprint's QA backlog) or **single-issue** (one issue from it). Only `sprint-wide` creates/updates the STP and the sprint session pair; `single-issue` creates neither.
+- Mode is a SCOPE, and scope is only one axis: **scope** (single-issue | sprint-wide) × **executors** (1 | N). One executor is the default and is unchanged in every detail. N>1 ("fleet mode") is sprint-wide ONLY, fires when the user answers the executors question with N (`orchestration.max_workers` in `.agents/project.yaml` is a round cap, never a switch); the orchestration gate then decides only who opens the sessions (pass → Orca launches/supervises; fail → the human pastes the same launch lines), and never changes what an issue's pipeline does — only who runs it. Canon: `sprint-testing/references/fleet-conductor.md`.
+- Fleet mode invariants: the launch file is written ALWAYS (gate or no gate — without the gate the human pastes its N lines) and when the gate fails the orchestration tool is NEVER named to the user; a worker = single-issue mode, detected from the prompt token `fleet worker` plus its brief (env vars are an optional extra signal on the human-paste path only), no checkpoints, preflight MCP probes NOT skippable, zero sprint-altitude writes, runs to `worker_done` without returning to its prompt; **rounds** (concurrency groups) are NOT **waves** (Jira-status buckets).
 - `sprint-wide` is a REAL session scope, not a folder: `.session/sprint-testing/sprint-<N>/{plan.md, progress.md}` per `agentic-qa-core/references/session-management.md` §6/§7, holding one nested `<JIRA-KEY>/` sub-scope per issue. `plan.md` is the local STP (queue + waves + assignment); `progress.md` is the append-only sprint log, one entry per issue close. There is NO local sprint tracker file — anything the team needs lives in the STP in Jira.
 - Sprint scope is a JQL QUERY, never a hardcoded issue-type list: take the work types declared `coverable: true` in `.agents/jira-required.yaml`, resolve each one's `jira_issue_type` (`A | B | C` = ordered alternatives, first the instance has wins), intersect with `.agents/jira-workflows.json`. A declared type the instance lacks is SKIPPED WITH A NOTE, never a blocker.
 - STP maintenance parity (concurrent testers): `plan.md` ↔ the STP issue DESCRIPTION — rewritten wholesale, so ONE writer (whoever plans the sprint), read-first before writing. `progress.md` ↔ the STP issue COMMENTS — append-only on both sides, one comment per issue close, so two testers never clobber each other. Where the comment log and a Story's ATR disagree, the **ATR wins** — it is the artifact of record.
 
 **Read full SKILL.md when**: starting a sprint cold, resuming a session, or handling a bug-triage / sprint-wide flow not covered by the rules above.
 
-> Source: `.agents\skills\sprint-testing\SKILL.md` · phase: `unknown` · source: frontmatter `compact_rules` (verbatim)
+> Source: `.agents/skills/sprint-testing/SKILL.md` · phase: `unknown` · source: frontmatter `compact_rules` (verbatim)
 
 ---
 
@@ -474,7 +540,7 @@ Skills indexed: 22
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
-> Source: `.agents\skills\sync-ai-context\SKILL.md` · phase: `unknown` · extraction strategy: B
+> Source: `.agents/skills/sync-ai-context/SKILL.md` · phase: `unknown` · extraction strategy: B
 
 ---
 
@@ -496,7 +562,7 @@ Skills indexed: 22
 
 **Read full SKILL.md when**: writing KATA component code, choosing fixtures for a hybrid flow, or applying the Phase 3 review checklist.
 
-> Source: `.agents\skills\test-automation\SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents/skills/test-automation/SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -523,7 +589,7 @@ Skills indexed: 22
 
 **Read full SKILL.md when**: resolving TMS modality, computing ROI, writing Gherkin, or wiring US-ATP-ATR-TC traceability links.
 
-> Source: `.agents\skills\test-documentation\SKILL.md` · phase: `unknown` · source: frontmatter `compact_rules` (verbatim)
+> Source: `.agents/skills/test-documentation/SKILL.md` · phase: `unknown` · source: frontmatter `compact_rules` (verbatim)
 
 ---
 
@@ -540,15 +606,15 @@ Skills indexed: 22
 - DO: pin every ATR execution to a Test Environment (value from `active_env`), so results stay comparable across runs. An execution that slipped through without one is repaired in place, not left.
 - DO: keep the Set-first cascade: the per-Story ATS holds the membership, and the Plan (ATP) and Execution (ATR) derive their test lists from it rather than maintaining their own.
 - DO: fill Story coverage with the Jira-layer issue link from the ATS to the Story. Plan→Story and Execution→Story links are administrative traceability and cover nothing; a direct Test→Story link is a last resort for an instance with no Test Set work type. Plan/Execution/Set MEMBERSHIP is Xray-internal GraphQL and is never an issue link.
-- DO: verify traceability with the one-call three-edge check, never from the coverage edge alone — a missing ATP→Story or ATR→Story link is a FAIL, not a warning, and the same call compares the ATS membership against the Plan and Execution test lists.
+- DO: state the coverage direction as the RAW FIELD, never as an outward/inward description: on a Story, the counting edge is the `issuelinks` entry carrying the artifact under `inwardIssue`. The artifact-first argument order produces it. Verify against Xray coverage (the three-edge check or the coverage panel), never against Jira link semantics — a Jira link list looks correct in both directions.
+- DO: replace an inverted coverage link, never add a corrected one on top: Jira dedupes a link between the same pair and type regardless of direction, so the create is a silent no-op until the wrong link is deleted by its own link id. Read the id first, dry-run, then delete with an explicit confirmation.
+- DO: verify traceability with the one-call three-edge check, never from the coverage edge alone — a missing ATP→Story or ATR→Story link is a FAIL, not a warning, and the same call compares the ATS membership against the Plan and Execution test lists. Sweep a whole project (several keys or a JQL query) at least once per engagement: an inverted link is invisible per Story and only reads as a pattern in aggregate.
+- DO: treat Xray run statuses as PER-INSTANCE vocabulary. `TODO` / `EXECUTING` / `PASSED` / `FAILED` are the safe floor; `ABORTED` and `BLOCKED` are Xray defaults a project may not define, and the mutation is rejected when it does not. Record a blocked case in a status the project DOES define and explain it in the run comment — never leave the run `TODO`, which reads as never executed.
 - WHEN a Jira-fallback path created the container without authenticated Xray: the Xray layer never registered the tests and runs come back empty. Reconcile with the per-entity sync (or the bulk repair scan) before importing results.
 - DO: import results onto an existing Execution key, never scoped to a project — the import API cannot set a parent, so a project-scoped import mints a fresh unparented Execution on every run, outside the artifact ladder.
 - DO NOT: hand-craft Xray JSON payloads outside this CLI, or reuse a bearer token past its 24h TTL. A stale token produces silent 401s mid-import that read like network blips.
-- DO: dry-run any import or backup restore before applying. Both write irreversibly across hundreds of tests and runs.
-- WHEN moving between sites: restore in sync-by-key mode (GraphQL ids are re-assigned per site, keys are not), re-authenticate between export and restore because auth holds ONE site at a time, and finish with the Jira instance-migration flow — field ids are reassigned and an old id silently resolves to a different field.
-- DO NOT: push run results for TCs the ROI verdict marked terminal-Manual. It creates audit noise and breaks the Candidate / Manual / Deferred reporting.
 - (truncated — read full SKILL.md for the rest)
 
 **Read full SKILL.md when**: composing a specific command, wiring the canonical end-to-end Story flow, running backup/restore or a cross-site migration, or enriching the synced PBI cache.
 
-> Source: `.agents\skills\xray-cli\SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents/skills/xray-cli/SKILL.md` · phase: `unknown` · extraction strategy: A

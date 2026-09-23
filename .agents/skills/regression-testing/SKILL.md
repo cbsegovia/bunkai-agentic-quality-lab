@@ -51,7 +51,7 @@ Three phases, always in this order: **Execute → Analyze → Report**. Do not s
 
 ## Inputs
 
-- `.github/workflows/*.yml` — workflow files for regression / smoke / sanity suites; defines triggers, inputs, and artifact uploads.
+- `.github/workflows/*.yml` — workflow files for regression / smoke / sanity suites; defines triggers, inputs, and artifact uploads. **LOAD `/github-actions-docs` before editing or diagnosing one**: Actions syntax (matrix, `needs`, reusable workflows, artifact retention, permissions) is the part of this skill's surface that changes upstream without telling anyone, and a guessed key fails at runner start with a message that points nowhere. Reading one does not need it; changing one does.
 - `.context/master-test-plan.md` — regression Epic key + expected pass-rate SLOs per suite.
 - `playwright.config.ts` — reporter config, retry policy, project matrix; needed to interpret retry counts and shard splits.
 - Previous run's Allure report (artifact URL or local download under `./analysis/previous/`) — baseline for trend computation.
@@ -81,6 +81,18 @@ This skill is compliant with the doctrine in `AGENTS.md` §"Orchestration Mode (
 | GO / CAUTION / NO-GO verdict                               | Single     | inline — main thread owns release decisions                                                                    |
 
 - **Error protocol**: On any subagent failure: STOP, report full context to user, present retry / skip / abort options. Do NOT auto-fix. See `.agents/skills/agentic-qa-core/references/orchestration-doctrine.md`.
+
+---
+
+## Fleet seam (optional)
+
+Triage itself is never parallelized across sessions: one conductor reads the run, classifies, and owns the verdict. The seam is for what comes AFTER Phase 2, when the classification leaves several **independent failure clusters** that each need code — and only when the user asks for them to be worked at once.
+
+- **Topology: one worktree per failure cluster.** A cluster's fix is code (a spec, a locator, a fixture), so each worker gets its own checkout and its own branch; two sessions in one checkout contend on the git index even on disjoint files. One cluster = one worker = one branch. Never two workers on one cluster.
+- The conductor writes `launch.txt` in `.session/regression-testing/<scope>/` — one self-contained line per cluster — **always**, whether or not any orchestration transport exists on the machine. Launching, supervising and closing those sessions is `orca-orchestration/SKILL.md` (`[ORCHESTRATION_TOOL]`): supervised launch is the native path, and `launch.txt` is the payload for the human-paste fallback when nothing can launch it.
+- **The verdict never moves.** GO / CAUTION / NO-GO, the metrics, the STR and every Jira write stay with the conductor (Phase 3). A worker fixes its cluster and reports; it does not re-score the run, does not file the defect, and does not transition the STR.
+- Each worker's fix is authored under `/test-automation` (Plan → Code → Review) on its own branch, and lands per `git_strategy` — a regression fix is not exempt from the automation gate.
+- **Silence rule**: the absence of an orchestration transport is never named to the user, never appears in the preflight gate, and never appears in the Environment block or the report.
 
 ---
 

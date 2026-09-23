@@ -5,7 +5,13 @@ import { dirname, join, resolve } from 'node:path';
 
 import { afterEach, describe, expect, test } from 'bun:test';
 
-import { PERSONALITY_CONTRACT } from '../../.agents/hooks/personality-reinject.mjs';
+import {
+  orcaAvailable,
+  PERSONALITY_CONTRACT,
+  proposeSessionTitle,
+  resolveWorktree,
+  sessionLabel,
+} from '../../.agents/hooks/personality-reinject.mjs';
 import { PersonalityReinject } from '../../.opencode/plugins/personality-reinject.js';
 import {
   CLAUDE_HOOK_COMMAND,
@@ -13,8 +19,12 @@ import {
   CODEX_HOOK_COMMAND_WINDOWS,
   declaredMcpIds,
   EXPECTED_MCP,
+  HOOK_IDENTITY_MARKER,
+  HOOK_ORCA_MARKER,
+  hookScriptPath,
   KNOWN_MCP_IDS,
   stripJsonComments,
+  validateEslintBlockWiring,
   validateHookCompatibility,
   validateMcpParity,
 } from './agent-compatibility-contracts.ts';
@@ -31,6 +41,7 @@ import {
   groupCompatibilityErrors,
   isInside,
   mergedCommandAliases,
+  normalizeNewlines,
   POSIX_CLAUDE_SKILLS_TARGET,
   repairAgentSurfaces,
   repairClaudeSkillsAlias,
@@ -68,6 +79,110 @@ function copyFromRepo(root: string, relativePath: string): void {
   const destination = join(root, relativePath);
   mkdirSync(dirname(destination), { recursive: true });
   copyFileSync(join(REPO_ROOT, relativePath), destination);
+}
+
+// ---------------------------------------------------------------------------
+// Hook emitter harness. The emitter resolves identity from stdin (the harness
+// payload), from the environment and from the home directory, so every run
+// gets a sandboxed HOME and a PATH pointing at `<sandbox>/bin` — an `orca`
+// file there is what makes the conditional Orca line appear. The environment
+// is REPLACED, never inherited: the suite itself runs inside a harness whose
+// CLAUDE_* variables would otherwise decide the outcome.
+// ---------------------------------------------------------------------------
+
+const NODE_BINARY = Bun.which('node') ?? 'node';
+const HOOK_EMITTER = join(REPO_ROOT, '.agents/hooks/personality-reinject.mjs');
+
+interface EmitterRun {
+  exitCode: number
+  stdout: string
+  stderr: string
+}
+
+interface EmitterOptions {
+  input?: string
+  env?: Record<string, string>
+  home?: string
+}
+
+function runEmitter(options: EmitterOptions = {}): EmitterRun {
+  const home = options.home ?? temporaryRoot('agent identity home ');
+  const result = Bun.spawnSync({
+    cmd: [NODE_BINARY, HOOK_EMITTER],
+    cwd: REPO_ROOT,
+    stdin: new TextEncoder().encode(options.input ?? ''),
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: { PATH: join(home, 'bin'), HOME: home, USERPROFILE: home, ...options.env },
+  });
+  return {
+    exitCode: result.exitCode,
+    stdout: result.stdout.toString(),
+    stderr: result.stderr.toString(),
+  };
+}
+
+interface HookSpecificOutput {
+  hookEventName: string
+  additionalContext: string
+  sessionTitle?: string
+}
+
+function hookSpecificOutput(stdout: string): HookSpecificOutput {
+  const parsed = JSON.parse(stdout) as { hookSpecificOutput: HookSpecificOutput };
+  return parsed.hookSpecificOutput;
+}
+
+const CLAUDE_SESSION_PID = '4242';
+const CLAUDE_SESSION_ID = 'c0ffee12-3456-7890-abcd-ef0123456789';
+
+/** `~/.claude/sessions/<CLAUDE_PID>.json` as Claude Code writes it. */
+function claudeHome(name: string, nameSource: string): string {
+  const home = temporaryRoot('agent identity claude home ');
+  write(home, `.claude/sessions/${CLAUDE_SESSION_PID}.json`, `${JSON.stringify({
+    pid: Number(CLAUDE_SESSION_PID),
+    sessionId: CLAUDE_SESSION_ID,
+    name,
+    nameSource,
+  })}\n`);
+  return home;
+}
+
+const CLAUDE_ENV = { CLAUDE_PROJECT_DIR: REPO_ROOT, CLAUDE_PID: CLAUDE_SESSION_PID };
+
+function claudePayload(prompt: string): string {
+  return JSON.stringify({
+    session_id: CLAUDE_SESSION_ID,
+    transcript_path: join(REPO_ROOT, 'transcript.jsonl'),
+    cwd: REPO_ROOT,
+    permission_mode: 'default',
+    hook_event_name: 'UserPromptSubmit',
+    prompt,
+  });
+}
+
+/** Codex pipes `turn_id` too, and keeps its thread names in a JSONL index. */
+function codexHome(threadName: string, sessionId: string): string {
+  const home = temporaryRoot('agent identity codex home ');
+  write(home, '.codex/session_index.jsonl', [
+    JSON.stringify({ id: 'older-session', thread_name: 'something else', updated_at: 1 }),
+    JSON.stringify({ id: sessionId, thread_name: threadName, updated_at: 2 }),
+    '',
+  ].join('\n'));
+  return home;
+}
+
+function codexPayload(sessionId: string, prompt: string): string {
+  return JSON.stringify({
+    session_id: sessionId,
+    turn_id: 'turn-1',
+    transcript_path: null,
+    cwd: REPO_ROOT,
+    hook_event_name: 'UserPromptSubmit',
+    model: 'gpt-5.1-codex',
+    permission_mode: 'default',
+    prompt,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -322,16 +437,15 @@ function repositoryFixture(): string {
 }
 
 describe('shared personality hook', () => {
-  test('emits the canonical payload and exits successfully', () => {
-    const result = Bun.spawnSync({
-      cmd: ['node', join(REPO_ROOT, '.agents/hooks/personality-reinject.mjs')],
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
+  test('emits the contract plus the identity line and exits successfully', () => {
+    const result = runEmitter();
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.toString()).toBe(PERSONALITY_CONTRACT);
-    expect(result.stderr.toString()).toBe('');
+    expect(result.stderr).toBe('');
+    // No harness payload, no CLAUDE_*/CODEX_* variables: plain text, no JSON.
+    expect(result.stdout).toContain(PERSONALITY_CONTRACT);
+    expect(result.stdout).toContain(`${HOOK_IDENTITY_MARKER} worktree=primary session=unknown harness=unknown`);
+    expect(result.stdout).not.toContain(HOOK_ORCA_MARKER);
   });
 
   test('names AGENTS.md as canonical, never CLAUDE.md', () => {
@@ -346,10 +460,137 @@ describe('shared personality hook', () => {
     const originalArray = output.system;
 
     await transform({ sessionID: 'test', model: {} }, output);
+    const afterFirst = output.system.length;
     await transform({ sessionID: 'test', model: {} }, output);
 
     expect(output.system).toBe(originalArray);
-    expect(output.system).toEqual(['base system', PERSONALITY_CONTRACT]);
+    expect(output.system.length).toBe(afterFirst);
+    expect(output.system[0]).toBe('base system');
+    expect(output.system[1]).toBe(PERSONALITY_CONTRACT);
+    // The label degrades to the raw id: OpenCode exposes no session name.
+    expect(output.system[2]).toContain('session=test harness=opencode');
+  });
+});
+
+describe('agent identity', () => {
+  test('Claude Code receives additionalContext and a title derived from the prompt', () => {
+    const run = runEmitter({
+      home: claudeHome('agentic-qa-boilerplate-7', 'derived'),
+      env: CLAUDE_ENV,
+      input: claudePayload('sprint-testing UPEX-123 please plan the QA'),
+    });
+
+    expect(run.exitCode).toBe(0);
+    const output = hookSpecificOutput(run.stdout);
+    expect(output.hookEventName).toBe('UserPromptSubmit');
+    expect(output.additionalContext).toContain(PERSONALITY_CONTRACT);
+    expect(output.additionalContext).toContain(
+      `${HOOK_IDENTITY_MARKER} worktree=primary session=agentic-qa-boilerplate-7 (${CLAUDE_SESSION_ID.slice(0, 8)}) harness=claude-code`,
+    );
+    expect(output.sessionTitle).toBe('UPEX-123-sprint-testing');
+  });
+
+  test('a user-set session name is never renamed and is used verbatim', () => {
+    const run = runEmitter({
+      home: claudeHome('release-audit', 'user'),
+      env: CLAUDE_ENV,
+      input: claudePayload('sprint-testing UPEX-123 please plan the QA'),
+    });
+
+    const output = hookSpecificOutput(run.stdout);
+    expect(output.sessionTitle).toBeUndefined();
+    expect(output.additionalContext).toContain('session=release-audit harness=claude-code');
+  });
+
+  test('a prompt with no workflow and issue key leaves the title alone', () => {
+    const run = runEmitter({
+      home: claudeHome('agentic-qa-boilerplate-7', 'derived'),
+      env: CLAUDE_ENV,
+      input: claudePayload('what does this repo do?'),
+    });
+
+    expect(hookSpecificOutput(run.stdout).sessionTitle).toBeUndefined();
+  });
+
+  test('Codex gets the same JSON shape without a session title', () => {
+    const sessionId = '019abcde-1111-2222-3333-444455556666';
+    const run = runEmitter({
+      home: codexHome('BK-77 retest', sessionId),
+      input: codexPayload(sessionId, 'sprint-testing BK-77 retest the fix'),
+    });
+
+    expect(run.exitCode).toBe(0);
+    const output = hookSpecificOutput(run.stdout);
+    expect(output.hookEventName).toBe('UserPromptSubmit');
+    expect(output.additionalContext).toContain(
+      `session=BK-77 retest (${sessionId.slice(0, 8)}) harness=codex`,
+    );
+    // `sessionTitle` is a Claude Code field; the Codex output wire has no such
+    // key, so emitting it there would risk the whole payload being rejected.
+    expect(output.sessionTitle).toBeUndefined();
+  });
+
+  test('the Orca line appears only when an orca binary sits on PATH', () => {
+    const home = temporaryRoot('agent identity orca ');
+    write(home, 'bin/orca', '#!/bin/sh\nexit 0\n');
+    write(home, 'bin/orca-ide', '#!/bin/sh\nexit 0\n'); // the Linux CLI name
+
+    expect(runEmitter({ home }).stdout).toContain(HOOK_ORCA_MARKER);
+    expect(runEmitter().stdout).not.toContain(HOOK_ORCA_MARKER);
+  });
+
+  test('ORCA_WORKTREE_ID names the worktree, its absence means primary', () => {
+    // A linked worktree's `.git` is a FILE; the primary checkout's is a directory.
+    const linked = temporaryRoot('agent identity linked worktree ');
+    write(linked, '.git', 'gitdir: /elsewhere/.git/worktrees/BK-123-login\n');
+    expect(resolveWorktree({ ORCA_WORKTREE_ID: 'repo-id::/work/orca/BK-123-login' }, linked)).toBe('BK-123-login');
+    expect(resolveWorktree({ ORCA_WORKTREE_ID: 'repo-id::C:\\work\\orca\\BK-9' }, linked)).toBe('BK-9');
+    expect(resolveWorktree({}, linked)).toBe('primary');
+    // Orca sets the variable for the primary checkout too: a `.git` directory wins.
+    const primary = temporaryRoot('agent identity primary ');
+    mkdirSync(join(primary, '.git'));
+    expect(resolveWorktree({ ORCA_WORKTREE_ID: 'repo-id::/work/orca/BK-123-login' }, primary)).toBe('primary');
+  });
+
+  test('the session label follows the name-source ladder', () => {
+    const sessionId = 'abcdef12-3456';
+    expect(sessionLabel({ sessionName: 'nightly', nameSource: 'user', sessionId })).toBe('nightly');
+    expect(sessionLabel({ sessionName: 'nightly', nameSource: 'derived', sessionId })).toBe('nightly (abcdef12)');
+    expect(sessionLabel({ sessionName: 'nightly', nameSource: 'unknown', sessionId })).toBe('nightly (abcdef12)');
+    expect(sessionLabel({ sessionId })).toBe(sessionId);
+    expect(sessionLabel({})).toBe('unknown');
+  });
+
+  test('an explicit --name hint in the prompt wins over the workflow shape', () => {
+    expect(proposeSessionTitle({
+      prompt: 'test-automation UPEX-9 --name "fleet worker 2"',
+      identity: { nameSource: 'derived' },
+    })).toBe('fleet worker 2');
+    expect(proposeSessionTitle({
+      prompt: 'test-automation UPEX-9',
+      identity: { nameSource: 'none' },
+    })).toBe('UPEX-9-test-automation');
+    expect(proposeSessionTitle({
+      prompt: 'test-automation UPEX-9',
+      identity: { nameSource: 'unknown' },
+    })).toBe('');
+  });
+
+  test('the native-path fleet-worker prompt shape still derives a title', () => {
+    // H1: the worker's prompt MUST begin with `/<workflow> <KEY> fleet worker …`.
+    expect(proposeSessionTitle({
+      prompt: '/sprint-testing BK-123 fleet worker: run every stage without returning to the prompt.',
+      identity: { nameSource: 'none' },
+    })).toBe('BK-123-sprint-testing');
+  });
+
+  test('orcaAvailable never spawns a process and tolerates an empty PATH', () => {
+    const home = temporaryRoot('agent identity path ');
+    write(home, 'bin/orca', '');
+
+    expect(orcaAvailable({ PATH: join(home, 'bin') })).toBe(true);
+    expect(orcaAvailable({ PATH: join(home, 'missing') })).toBe(false);
+    expect(orcaAvailable({})).toBe(false);
   });
 });
 
@@ -376,18 +617,86 @@ describe('Codex hook portability', () => {
     const result = Bun.spawnSync({
       cmd: ['sh', '-c', CODEX_HOOK_COMMAND],
       cwd: nested,
+      stdin: new TextEncoder().encode(''),
       stdout: 'pipe',
       stderr: 'pipe',
     });
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.toString()).toBe(PERSONALITY_CONTRACT);
+    expect(result.stdout.toString()).toContain(PERSONALITY_CONTRACT);
   });
 
   test('renders a Windows command with Git-root and Join-Path resolution', () => {
     expect(CODEX_HOOK_COMMAND_WINDOWS).toContain('git rev-parse --show-toplevel');
     expect(CODEX_HOOK_COMMAND_WINDOWS).toContain('Join-Path $root \'.agents/hooks/personality-reinject.mjs\'');
     expect(CODEX_HOOK_COMMAND_WINDOWS).not.toContain('/Users/');
+  });
+});
+
+describe('eslint block wiring', () => {
+  const BASE = `export const BASE_ESLINT_OPTIONS = { rules: {} };
+export const CLI_IMPORT_CLOSURE = { files: ['cli/**/*.ts'], rules: {} };
+export const KATA_IMPORT_ALIASES = { files: ['tests/**/*.ts'], rules: {} };
+`;
+
+  test('the real repository wires every block it exports', () => {
+    expect(validateEslintBlockWiring(REPO_ROOT)).toEqual([]);
+  });
+
+  // The failure this exists for: `eslint.config.base.js` is SYNCED and
+  // `eslint.config.js` is never overwritten, so upstream can ship a rule that
+  // lands on disk, exports cleanly and enforces nothing.
+  test('an unwired block is an error naming it and the fix', () => {
+    const root = contractFixture();
+    write(root, 'eslint.config.base.js', BASE);
+    write(root, 'eslint.config.js', 'import { BASE_ESLINT_OPTIONS, CLI_IMPORT_CLOSURE } from \'./eslint.config.base.js\';\nexport default antfu({ ...BASE_ESLINT_OPTIONS }, CLI_IMPORT_CLOSURE);\n');
+    const errors = validateEslintBlockWiring(root);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('KATA_IMPORT_ALIASES');
+    expect(errors[0]).toContain('enforces nothing');
+  });
+
+  // The hole this check had on the day it was written. `eslint.config.js`'s own
+  // JSDoc names `CLI_IMPORT_CLOSURE` in prose, so a raw substring search found
+  // it there and passed a consumer that had stopped wiring the block.
+  test('a name mentioned only in a comment does NOT count as wiring', () => {
+    const root = contractFixture();
+    write(root, 'eslint.config.base.js', BASE);
+    write(root, 'eslint.config.js', '/** Extra blocks go after `CLI_IMPORT_CLOSURE`. */\n// KATA_IMPORT_ALIASES lives in the base.\nexport default antfu({});\n');
+    const errors = validateEslintBlockWiring(root);
+    expect(errors).toHaveLength(2);
+    expect(errors.join(' ')).toContain('CLI_IMPORT_CLOSURE');
+    expect(errors.join(' ')).toContain('KATA_IMPORT_ALIASES');
+  });
+
+  // Without a word boundary, wiring the longer name satisfies the shorter one.
+  test('a longer block name does not satisfy the shorter one it contains', () => {
+    const root = contractFixture();
+    write(root, 'eslint.config.base.js', 'export const CLI_IMPORT_CLOSURE = {};\nexport const CLI_IMPORT_CLOSURE_EXTRA = {};\n');
+    write(root, 'eslint.config.js', 'import { CLI_IMPORT_CLOSURE_EXTRA } from \'./eslint.config.base.js\';\nexport default antfu({}, CLI_IMPORT_CLOSURE_EXTRA);\n');
+    const errors = validateEslintBlockWiring(root);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('wire CLI_IMPORT_CLOSURE from');
+  });
+
+  test('a fully wired consumer is clean', () => {
+    const root = contractFixture();
+    write(root, 'eslint.config.base.js', BASE);
+    write(root, 'eslint.config.js', 'import { BASE_ESLINT_OPTIONS, CLI_IMPORT_CLOSURE, KATA_IMPORT_ALIASES } from \'./eslint.config.base.js\';\nexport default antfu({ ...BASE_ESLINT_OPTIONS }, CLI_IMPORT_CLOSURE, KATA_IMPORT_ALIASES);\n');
+    expect(validateEslintBlockWiring(root)).toEqual([]);
+  });
+
+  // The options object is spread into antfu's first argument, not passed as a
+  // scoped block, so requiring it by name would fire on every correct config.
+  test('BASE_ESLINT_OPTIONS is never demanded as a block', () => {
+    const root = contractFixture();
+    write(root, 'eslint.config.base.js', 'export const BASE_ESLINT_OPTIONS = { rules: {} };\n');
+    write(root, 'eslint.config.js', 'export default antfu({});\n');
+    expect(validateEslintBlockWiring(root)).toEqual([]);
+  });
+
+  test('a repo without the split config is not a finding', () => {
+    expect(validateEslintBlockWiring(contractFixture())).toEqual([]);
   });
 });
 
@@ -430,6 +739,35 @@ describe('hook adapters', () => {
     ].join('\n'));
 
     expect(validateHookCompatibility(root)).toContain('OpenCode personality adapter must mutate output.system in place.');
+  });
+
+  test('reads the emitter path out of every adapter form', () => {
+    expect(hookScriptPath(CLAUDE_HOOK_COMMAND)).toBe('.agents/hooks/personality-reinject.mjs');
+    expect(hookScriptPath(CODEX_HOOK_COMMAND)).toBe('.agents/hooks/personality-reinject.mjs');
+    expect(hookScriptPath(CODEX_HOOK_COMMAND_WINDOWS)).toBe('.agents/hooks/personality-reinject.mjs');
+    expect(hookScriptPath('node run-something')).toBeNull();
+  });
+
+  test('rejects a hook command pointing at a file that does not exist', () => {
+    // The shape a rename leaves behind: `.claude/settings.json` is bootstrap-only,
+    // so it keeps naming the emitter's old path while the emitter has moved.
+    const root = contractFixture();
+    write(root, '.claude/settings.json', hookSettings(
+      'node "$CLAUDE_PROJECT_DIR/.agents/hooks/personality-reinject-renamed.mjs"',
+    ));
+
+    expect(validateHookCompatibility(root)).toContain(
+      'claude hook command points at a file that does not exist: .agents/hooks/personality-reinject-renamed.mjs',
+    );
+  });
+
+  test('rejects a hook command that names no repository-relative script', () => {
+    const root = contractFixture();
+    write(root, '.claude/settings.json', hookSettings('node --version'));
+
+    expect(validateHookCompatibility(root)).toContain(
+      'claude hook command does not name a repository-relative hook script.',
+    );
   });
 });
 
@@ -501,6 +839,47 @@ describe('MCP semantic parity', () => {
     expect(errors).toContain('MCP context8 missing from codex: declared in .mcp.json, absent from .codex/config.toml');
     expect(errors).toContain('MCP context7 present in opencode only: declare it in .mcp.json or remove it from opencode.jsonc');
     expect(errors).toContain('MCP context7 present in codex only: declare it in .mcp.json or remove it from .codex/config.toml');
+  });
+
+  test('reads OpenCode {file:dir/VAR} as the same dependency as {env:VAR}', () => {
+    // `scripts/harness-env.ts` rewrites every credential in `opencode.jsonc` to a
+    // `{file:.auth/opencode/<VAR>}` pointer, because `{env:}` resolves only from a
+    // process environment a desktop launch does not have. That is the SAME .env
+    // dependency by a different route, so parity must still hold.
+    const root = contractFixture();
+    const configPath = join(root, 'opencode.jsonc');
+    writeFileSync(configPath, readFileSync(configPath, 'utf8')
+      .replace('{env:POSTMAN_API_KEY}', '{file:.auth/opencode/POSTMAN_API_KEY}')
+      .replace('{env:TAVILY_API_KEY}', '{file:.auth/opencode/TAVILY_API_KEY}'));
+
+    expect(validateMcpParity(root)).toEqual([]);
+  });
+
+  test('a renamed {file:dir/VAR} still fails parity, so the form is checked and not merely tolerated', () => {
+    const root = contractFixture();
+    const configPath = join(root, 'opencode.jsonc');
+    writeFileSync(configPath, readFileSync(configPath, 'utf8')
+      .replace('{env:POSTMAN_API_KEY}', '{file:.auth/opencode/POSTMAN_TOKEN}'));
+
+    expect(validateMcpParity(root).some(error =>
+      error.includes('opencode MCP postman mismatch') && error.includes('POSTMAN_TOKEN'))).toBe(true);
+  });
+
+  test('a {file:} path whose final segment is NOT all-caps stays a literal', () => {
+    // The guardrail on the pattern. `{file:certs/ca.pem}` is a file, not a
+    // credential named after a variable, and must never be read as a dependency
+    // on some variable. Anyone tempted to widen the regex has to break this.
+    const root = contractFixture();
+    const configPath = join(root, 'opencode.jsonc');
+    writeFileSync(configPath, readFileSync(configPath, 'utf8')
+      .replace('{env:API_BASE_URL}', '{file:certs/ca.pem}'));
+
+    const errors = validateMcpParity(root);
+    // Still an error, because the openapi server genuinely lost its API_BASE_URL
+    // dependency — but it is reported as a LITERAL, not as a dependency on `pem`.
+    expect(errors.some(error => error.includes('opencode MCP openapi mismatch'))).toBe(true);
+    expect(errors.some(error => error.includes('certs/ca.pem'))).toBe(true);
+    expect(errors.some(error => error.toLowerCase().includes('"pem"'))).toBe(false);
   });
 
   test('reports an environment-variable mismatch', () => {
@@ -623,6 +1002,68 @@ describe('canonical sources', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// A CRLF checkout — what a downstream project gets under `core.autocrlf=true`
+// once `.gitattributes` is deleted. Every generated surface is written with
+// pure `\n`, so byte equality against the file git hands back is what breaks:
+// the shim comparison threw (killing `agents:compat:check`, `repo:check` and
+// the pre-push hook together) and all 20 wrappers read as stale, so the repair
+// rewrote them on every run. `crlf()` is what git's conversion does.
+// ---------------------------------------------------------------------------
+
+function crlf(text: string): string {
+  return text.replace(/\n/g, '\r\n');
+}
+
+function toCrlfOnDisk(root: string, relativePath: string): void {
+  const path = join(root, relativePath);
+  writeFileSync(path, crlf(readFileSync(path, 'utf8')));
+}
+
+describe('CRLF checkout', () => {
+  test('normalizeNewlines maps CRLF to LF and leaves LF alone', () => {
+    expect(normalizeNewlines('@AGENTS.md\r\n')).toBe(CLAUDE_INSTRUCTIONS_SHIM);
+    expect(normalizeNewlines(CLAUDE_INSTRUCTIONS_SHIM)).toBe(CLAUDE_INSTRUCTIONS_SHIM);
+  });
+
+  test('accepts a CRLF shim and still rejects a shim that grew prose', () => {
+    const root = temporaryRoot();
+    write(root, 'AGENTS.md', '# memory\n');
+    mkdirSync(join(root, '.agents/skills'), { recursive: true });
+
+    write(root, 'CLAUDE.md', crlf(CLAUDE_INSTRUCTIONS_SHIM));
+    expect(validateCanonicalSources(root)).toEqual([]);
+
+    write(root, 'CLAUDE.md', crlf('@AGENTS.md\n\nSome operational prose.\n'));
+    expect(validateCanonicalSources(root)).toEqual(['CLAUDE.md must contain exactly `@AGENTS.md` followed by one newline.']);
+  });
+
+  test('leaves CRLF wrappers alone instead of rewriting them on every run', () => {
+    const root = repositoryFixture();
+    for (const host of ['.claude/commands', '.opencode/commands']) {
+      for (const alias of ALIASES) {
+        toCrlfOnDisk(root, `${host}/${alias.alias}.md`);
+      }
+    }
+
+    expect(validateCommandAliases(root)).toEqual([]);
+    expect(repairCommandWrappers(root)).toBe(0);
+    // Untouched: rewriting them with LF only dirties a tree git converts back.
+    expect(readFileSync(join(root, '.claude/commands/master-test-plan.md'), 'utf8')).toContain('\r\n');
+  });
+
+  test('still reports a CRLF wrapper whose content actually drifted', () => {
+    const root = repositoryFixture();
+    write(root, '.claude/commands/master-test-plan.md', crlf('---\ndescription: hand-edited\n---\n'));
+
+    expect(validateCommandAliases(root)).toEqual([
+      'claude command wrapper is stale: .claude/commands/master-test-plan.md',
+    ]);
+    expect(repairCommandWrappers(root)).toBe(1);
+    expect(validateCommandAliases(root)).toEqual([]);
+  });
+});
+
 describe('Claude skills alias', () => {
   test('constructs portable POSIX and Windows alias plans', () => {
     const root = temporaryRoot();
@@ -649,6 +1090,20 @@ describe('Claude skills alias', () => {
     expect(readlinkSync(join(root, '.claude/skills'))).toBe(POSIX_CLAUDE_SKILLS_TARGET);
     expect(readFileSync(join(root, '.claude/skills/project-context/SKILL.md'), 'utf8')).toContain('name: project-context');
     expect(repairClaudeSkillsAlias(root, 'linux').status).toBe('valid');
+  });
+
+  test('accepts a junction target that differs only in case', () => {
+    // A Windows filesystem is case-insensitive, and `readlinkSync` can return a
+    // drive-letter (or any segment) cased differently from `process.cwd()`. A
+    // case-sensitive comparison called that an unexpected target and made the
+    // repair unlink and recreate a junction that was already correct.
+    const root = repositoryFixture();
+    const canonical = join(root, '.agents', 'skills');
+    mkdirSync(join(root, '.claude'), { recursive: true });
+    symlinkSync(canonical.replace('.agents', '.AGENTS'), join(root, '.claude/skills'), 'dir');
+
+    expect(checkAgentCompatibility(root, 'win32').alias.status).toBe('valid');
+    expect(repairClaudeSkillsAlias(root, 'win32').status).toBe('valid');
   });
 
   test('re-points a symlink aimed somewhere else', () => {
@@ -947,8 +1402,9 @@ describe('compatibility report grouping', () => {
       'codex hook command must be exactly: node x',
       'CLAUDE.md must contain exactly `@AGENTS.md` followed by one newline.',
       'MCP tavily present in opencode only: declare it in .mcp.json or remove it from opencode.jsonc',
+      'eslint.config.js does not wire KATA_IMPORT_ALIASES from eslint.config.base.js: the rule ships but enforces nothing. Add it to the import and to the antfu(...) call.',
     ]);
-    expect(groups.map(g => [g.group, g.errors.length])).toEqual([['instructions', 1], ['alias', 1], ['wrappers', 1], ['hooks', 1], ['mcp', 2]]);
+    expect(groups.map(g => [g.group, g.errors.length])).toEqual([['instructions', 1], ['alias', 1], ['wrappers', 1], ['hooks', 1], ['mcp', 2], ['lint', 1]]);
     expect(groups.map(g => g.label)).toEqual(COMPATIBILITY_GROUP_ORDER.map(g => COMPATIBILITY_GROUP_LABEL[g]));
     expect(groupCompatibilityErrors([])).toEqual([]);
   });

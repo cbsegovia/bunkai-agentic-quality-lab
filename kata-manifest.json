@@ -1,12 +1,12 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-09-20T00:15:38.316Z",
+  "generatedAt": "2026-09-23T12:41:18.155Z",
   "components": {
     "api": [
       {
         "name": "AuthApi",
         "file": "AuthApi.ts",
-        "relativePath": "tests\\components\\api\\AuthApi.ts",
+        "relativePath": "tests/components/api/AuthApi.ts",
         "atcs": [
           {
             "id": "BK-101",
@@ -23,13 +23,13 @@
       {
         "name": "ProjectsApi",
         "file": "ProjectsApi.ts",
-        "relativePath": "tests\\components\\api\\ProjectsApi.ts",
+        "relativePath": "tests/components/api/ProjectsApi.ts",
         "atcs": []
       },
       {
         "name": "TraceabilityApi",
         "file": "TraceabilityApi.ts",
-        "relativePath": "tests\\components\\api\\TraceabilityApi.ts",
+        "relativePath": "tests/components/api/TraceabilityApi.ts",
         "atcs": [
           {
             "id": "BK-107",
@@ -51,7 +51,7 @@
       {
         "name": "UserStoryApi",
         "file": "UserStoryApi.ts",
-        "relativePath": "tests\\components\\api\\UserStoryApi.ts",
+        "relativePath": "tests/components/api/UserStoryApi.ts",
         "atcs": [
           {
             "id": "BK-105",
@@ -70,7 +70,7 @@
       {
         "name": "LoginPage",
         "file": "LoginPage.ts",
-        "relativePath": "tests\\components\\ui\\LoginPage.ts",
+        "relativePath": "tests/components/ui/LoginPage.ts",
         "atcs": [
           {
             "id": "BK-103",
@@ -87,7 +87,7 @@
       {
         "name": "ProjectsPage",
         "file": "ProjectsPage.ts",
-        "relativePath": "tests\\components\\ui\\ProjectsPage.ts",
+        "relativePath": "tests/components/ui/ProjectsPage.ts",
         "atcs": [
           {
             "id": "BK-604",
@@ -139,7 +139,7 @@
       {
         "name": "SnapshotDocumentPage",
         "file": "SnapshotDocumentPage.ts",
-        "relativePath": "tests\\components\\ui\\SnapshotDocumentPage.ts",
+        "relativePath": "tests/components/ui/SnapshotDocumentPage.ts",
         "atcs": [
           {
             "id": "BK-332",
@@ -156,7 +156,7 @@
       {
         "name": "TraceabilityPage",
         "file": "TraceabilityPage.ts",
-        "relativePath": "tests\\components\\ui\\TraceabilityPage.ts",
+        "relativePath": "tests/components/ui/TraceabilityPage.ts",
         "atcs": [
           {
             "id": "BK-331",

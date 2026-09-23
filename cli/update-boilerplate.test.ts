@@ -65,8 +65,13 @@ describe('protected watchlist', () => {
     for (const p of ['.mcp.json', 'opencode.jsonc', '.codex/config.toml', '.claude/settings.json']) {
       expect(byPath[p]).toMatchObject({ source: 'upstream' });
     }
-    expect(byPath['.husky/pre-commit']).toMatchObject({ reason: 'project gates live here', source: 'upstream' });
-    expect(byPath['.husky/pre-push']).toMatchObject({ reason: 'project gates live here', source: 'upstream' });
+    // Both hooks stay watched for what is genuinely theirs (ordering + their own
+    // gates); the reason has to name the synced file the framework gates come
+    // from, since that sentence is what the drift row shows the operator.
+    for (const hook of ['.husky/pre-commit', '.husky/pre-push']) {
+      expect(byPath[hook]).toMatchObject({ source: 'upstream' });
+      expect(byPath[hook]?.reason).toContain('.husky/framework-gates.sh');
+    }
     expect(byPath['.agents/project.yaml']?.structural).toBe(true);
     expect(byPath['.agents/jira-required.yaml']?.structural).toBe(true);
     expect(byPath['.claude/settings.json']?.structural).toBeUndefined();
@@ -114,8 +119,11 @@ describe('post-apply gates', () => {
     return root;
   }
 
-  test('the KATA manifest check is a gate next to types and lint', () => {
-    expect([...GATE_SCRIPTS]).toEqual(['types:check', 'lint:check', 'kata:manifest:check']);
+  test('the KATA manifest and skill-lint checks are gates next to types and lint', () => {
+    // `skills:check` is the only gate that sees a half-delivered release: a new
+    // skill applied here, the category vocabulary it needs kept in a protected
+    // file (see PATH_PREREQUISITES).
+    expect([...GATE_SCRIPTS]).toEqual(['types:check', 'lint:check', 'kata:manifest:check', 'skills:check']);
   });
 
   test('a failing gate reports exit code, error count, the first lines and which applied files they name', () => {

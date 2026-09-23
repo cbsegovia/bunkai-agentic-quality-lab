@@ -4,6 +4,8 @@ Use this reference when iterating multiple issues in a sprint. Covers: building 
 
 > "Issue", not "story": Story, Bug, Defect, Improvement, Tech Story and Tech Debt are all coverable, and the sprint queue holds whichever of them the project declares (see §Part 1 Step 1).
 
+> Everything here describes the default of **one executor**. When the run has more than one (fleet mode — `SKILL.md` §"Executors — the second axis"), read `fleet-conductor.md` alongside this file: it owns exactly what the fan-out adds and repeats nothing this file already says.
+
 ---
 
 ## Parameters
@@ -26,7 +28,7 @@ If a parameter is missing, ASK the user before proceeding. Before starting, veri
 You are the ORCHESTRATOR for in-sprint QA on `{{PROJECT_NAME}}`. Manage the workflow by dispatching sub-agents per stage, maintaining shared memory, and interacting with the user at defined checkpoints.
 
 1. NEVER execute testing stages yourself. ALWAYS delegate to a sub-agent via the Agent tool (sequential fallback when sub-agents are unavailable).
-2. Sub-agents run SEQUENTIALLY — one stage at a time. Wait for completion before dispatching the next.
+2. Sub-agents run SEQUENTIALLY — one stage at a time. Wait for completion before dispatching the next. This is a rule about the stages of ONE issue and it holds unconditionally; fleet mode (N>1 executors) runs issues concurrently and each worker still runs its own four stages sequentially.
 3. After every sub-agent finishes, re-read `test-session-memory.md` and present a brief summary to the user.
 4. TOOL FAILURE -> STOP, surface error, do NOT dispatch next sub-agent, wait for user instructions.
 5. **Blocking** BUG_FOUND (smoke/env down, data integrity, security-exploitable) -> PAUSE, present bug to user, wait for decision. A **non-blocking** finding does NOT pause: the Execution subagent logs it and finishes the pass, and you surface it at Stage 2 close. Classify by the "Finding triage" table in `exploration-patterns.md`; a FAIL is not auto-Critical.
@@ -95,7 +97,18 @@ and mirrors them onto the **STP** issue (`STP: Sprint#{N}: {objective}`, a Test 
    - Done = `{{jira.status.story.qa_approved}}` (with artifacts) / `ready_for_release` / `deployed_to_production`.
    - Cancelled = `{{jira.status.story.aborted}}`.
 6. **Detect QA automation tasks**: `Type = QA Task` OR title contains "E2E Tests" / "Integration Tests", assigned to `qa_lead`. Collect them as their own wave in the queue.
+6b. **Assign the executors — and, at N>1, the rounds.** The executors answer comes from the second scope question (`SKILL.md` §"Executors — the second axis"), never from guessing.
+
+   | Executors | `Owner` cell | `Pattern` cell | Rounds |
+   |---|---|---|---|
+   | 1 (default) | `{qa_lead or unassigned}` — exactly as before | `Sequential` | none; the queue is walked in order |
+   | N (fleet mode) | the **worker label** that owns the issue (`W1`, `W2`, …) | `Fleet` | inside the current wave, group the `PENDING` rows into rounds of at most `orchestration.max_workers` (`.agents/project.yaml`); record the round number next to the label |
+
+   **Rounds are not waves — do not conflate them.** A **wave** is a Jira-**status** bucket (Step 3 / Step 5 above): it decides *which* issues are eligible and in what order. A **round** is a concurrency group: it decides *how many* run at the same time. Rounds are numbered INSIDE a wave ("Wave 1, round 2") and restart at 1 when a new wave opens. Wave ordering, wave membership and the Step 3 classification table are identical at N=1 and N>1.
+
+   Two issues whose fixture/data intent would WRITE the same entity never share a round — split them across rounds (`fleet-conductor.md` §Claims).
 7. **Write the sprint session pair** using the two schemas below.
+7b. **Resolve the four QA-process epic keys — and CACHE them back.** Before any sprint-altitude artifact is created, read `.agents/project.yaml` → `qa.qa_epics.*.key`. For every entry still `null` (the shipped state), search the project for an Epic carrying the label in `qa.qa_artifact_label`, matched by the configured `name` (QA Master Test Plan · QA Test Repository · QA Test Artifacts · QA Defect Management). **Found → write the key into `qa.qa_epics.<epic>.key` in `.agents/project.yaml`** and continue; absent → create it once per `agentic-qa-core/references/defect-management-doctrine.md` Part 4 "Find-or-create", then cache the key the same way. Measured 2026-09-17: all four Epics existed in Jira while every `key` was still `null`, so each session either re-discovered them or concluded they were missing and proposed creating duplicates. The cache-back is what makes the second session cheap and the tenth session safe. One writer: this is Part 1, the conductor's own step — a worker never writes the yaml (`fleet-conductor.md` §2).
 8. **Find-or-create the STP** (`SKILL.md` §Session Start 0.7) and seed its **description** from `plan.md`. Present → read-first, then update the description in place; never blind-overwrite another planner's edit.
 9. **Report** a short board summary: totals, wave counts, carryovers, and every work type skipped in Step 1d.
 
@@ -139,6 +152,10 @@ Sprint-wide mode. One nested sub-scope per issue at `.session/sprint-testing/spr
 {Status lives in "Exit condition": PENDING while queued, then PASSED / FAILED / BLOCKED /
  DEFERRED / SKIPPED once Stage 3 closed the issue. The orchestrator scans for the
  lowest-numbered PENDING to pick the next issue.}
+
+{`Pattern` = `Sequential` at one executor (the default). In fleet mode (N>1 executors) it
+ reads `Fleet` and `Owner` carries the worker label plus its round — `W2 (r1)` — per Step 6b.
+ Both columns already existed; fleet mode only gives them a second legal value.}
 
 ## Risks & open questions
 - {risk} — mitigation: {…}
@@ -227,6 +244,41 @@ ORCHESTRATOR                           SUB-AGENTS
     |-> Present per-issue summary, WAIT for user OK
     |-> Loop to next issue
 ```
+
+This is the loop at **one executor**, and it is the default. It is unchanged.
+
+### The fleet loop (N>1 executors only)
+
+At more than one executor the loop iterates over **rounds** instead of over single issues. Everything inside an issue is identical — the same four dispatches, the same artifacts, the same gates — it simply happens inside a launched worker session rather than here.
+
+```
+CONDUCTOR                                   WORKERS (one per issue of the round)
+    |
+    |-> Read plan.md queue + tail of sprint progress.md
+    |-> Form the round: current wave, <= max_workers PENDING rows,
+    |   no two write-claims on the same entity           (Part 1 Step 6b)
+    |-> Conductor-only prep: mint tokens, bulk tracker pull      (fleet-conductor.md §2/§7)
+    |-> Seed one brief.md per issue + regenerate launch.txt WHOLE (fleet-conductor.md §4/§5)
+    |-> Syntax-check every launch line, then launch the round
+    |                                       --> each worker: Session Start -> Stage 1
+    |                                           -> Stage 2 -> Stage 3, no checkpoints
+    |-> WAIT on the mailbox (one waiter, no polling, no monitor)
+    |   `ask` -> answer it · `escalation` -> decide · `claim` -> arbitrate + broadcast
+    |-> A worker reports done:
+    |     verify its checklist (STEP 5)
+    |     append ONE sprint progress.md entry + ONE STP comment   (STEP 4 — unchanged)
+    |     move the queue row off PENDING · archive the sub-scope
+    |     release/close that worker IN THE ACT
+    |-> Round drained -> present the round summary + dashboard, WAIT for user OK
+    |-> Next round; wave advances only when its rounds are exhausted
+```
+
+Invariants this loop must not break:
+
+- **STP parity is untouched.** `plan.md` ↔ description (one writer: the conductor), `progress.md` ↔ comments (append-only). The conductor makes both sprint-altitude writes even in fleet mode — see `fleet-conductor.md` §10 for why one writer is kept although appends cannot collide.
+- **STEP 4, STEP 5, STEP 6 and STEP 7 below are unchanged.** They run per closed issue and at sprint close exactly as written, whoever executed the issue.
+- **A worker never talks to the user**, and the user's checkpoint is the round, not each issue. Per-issue detail goes into the round summary.
+- **A finished worker is closed immediately**, not at the end of the round.
 
 ### STEP 1 — Auto-detect the next issue
 
@@ -418,7 +470,8 @@ Exact instructions:
        - the resolved transition id is not available from the current status -> `"transition_not_available_from_<current_status>"`
      Otherwise execute `[ISSUE_TRACKER_TOOL] Transition Issue` with the resolved transition id and append `{ when: "pre-smoke", from, to, transition_id }` to `Stage Results > Execution > Transition Trail` in `test-session-memory.md`. Never abort Stage 2 on this step — surface the skip reason in the report and proceed.
   1a. **Self-assign QA ownership** when the Story is taken into testing (per `agentic-qa-core/references/defect-management-doctrine.md` Part 2): set `{{jira.qa_assignee}}` to the AUTHENTICATED session user (self-assign — same identity that becomes `reporter`). **Never-overwrite** — read the current value first (from the synced `.md` or a GET); write only if empty, or on an explicit, justified handover. `qa_assignee` is the QA owner, DISTINCT from the native dev `assignee` (do NOT touch `assignee`). Customfield write mechanics (REST `PUT`, read-before-write) → doctrine Part 6 + `/acli`. Non-blocking — surface a skip reason in the report and proceed if it cannot be set.
-  2. Configure evidence: set .playwright/cli.config.json `outputDir` to <PBI_FOLDER>/evidence/. Screenshots also need full path in --filename (outputDir does NOT apply to .png).
+  1b. **Check `assignee` AFTER the step-1 transition** — some workflows carry an undocumented assign post-function. Measured 2026-09-17: `start_testing` (and `qa_sign_off` in Stage 3) silently moved the native `assignee` from the developer to the QA engineer who fired the transition, on an instance whose own doctrine keeps the two owners distinct. The transition did not advertise it and nothing in the catalog records it. So: read `assignee` BEFORE firing (step 1 already does a GET for the available transitions — take it from the same read), read it again after, and if the transition moved it, **restore the previous owner** and note the post-function in the Transition Trail. Never leave a dev's Story silently reassigned; if the project genuinely wants QA as `assignee` during testing, that is the user's call — ask once and record it. Full rule: `agentic-qa-core/references/defect-management-doctrine.md` Part 2 §"Transitions that reassign".
+  2. Configure evidence: **do NOT repoint the shared `.playwright/cli.config.json`** — its `outputDir` stays at the tool-owned directory it ships with (`agentic-qa-core/references/evidence-conventions.md` §1 Bucket A + §5). Every capture instead carries its **full destination path** into <PBI_FOLDER>/evidence/, which is mandatory anyway because `outputDir` does not apply to `.png`. Need real isolation (a fleet, or two terminals on one checkout)? A complete per-session config file, never an edit to the shared one — mechanics in `/playwright-cli`.
   3. Smoke (5-10 min, ALWAYS FIRST): validate the happy path of every P0 ATC. If smoke fails, emit smoke_result=fail and STOP — do NOT proceed to deep exploration.
   4. Triforce UI: explore edge cases, empty states, validation errors per exploration-patterns.md §1.
   5. Triforce API: hit the relevant endpoints with valid + invalid + boundary payloads via the API MCP per exploration-patterns.md §2.
@@ -471,6 +524,7 @@ Exact instructions:
   2. Author the ATR body from the template in reporting-templates.md §"ATR Test Report body" (do NOT hand-write a local file — it is materialized from the sync in step 3a).
   3. Update the ATR in TMS:
        - Modality jira-xray: [TMS_TOOL] Update Test Execution / Run statuses, then TRANSITION the Execution: `[ISSUE_TRACKER_TOOL] Transition: {{jira.transition.test_execution.complete}}` (`active` -> `close`). "Mark complete" is the transition — an ATR left at `{{jira.status.test_execution.active}}` reads as a run still in progress.
+  3-bis. **Run statuses are per-project vocabulary — read them, do not assume them.** The TMS advertises a generic set, but each instance configures which run statuses exist. Measured 2026-09-17: an instance accepted only `TODO`, `EXECUTING`, `PASSED`, `FAILED` and rejected `BLOCKED` and `ABORTED` outright, with a bare validation error and no list of the accepted values. So: on the FIRST status write of the session, use the project's own vocabulary (the TMS skill's status list for this instance, or one probe), and when a value is rejected do NOT retry variants — record the blocked case through the documented alternative instead: mark the run `FAILED` (or leave it `TODO` when nothing was executed) **and** write the real reason into the ATR body as `BLOCKED — <reason>` per `reporting-templates.md`, plus the same reason in the Findings list. The reason text is what the reader needs; the enum value is only a filter. Never silently drop a blocked case because its status would not fit.
        - Modality jira-native: [ISSUE_TRACKER_TOOL] Update Issue with {{jira.acceptance_test_results}} field (or `## Acceptance Test Results (ATR)` fallback comment when the field is absent).
   3b. **Close the other two Stage-1 artifacts** (`agentic-qa-core/references/artifact-lifecycle.md` §1) — Modality jira-xray:
         - ATS: membership is now final -> `[ISSUE_TRACKER_TOOL] Transition: {{jira.transition.test_set.done}}` (`designing` -> `close`).
@@ -489,6 +543,7 @@ Exact instructions:
            - Otherwise (flag is false, or substrate lacks `blocked` / `defect_reported`) -> non-strict fallback: leave the story in `{{jira.status.story.in_test}}` with the linked bug and emit `transition_skipped: "non_strict_failed_left_in_test"`. The dev fixes the underlying bug; QA re-tests once redeployed.
        - **Bug FAILED** -> non-strict fallback: leave the bug in `{{jira.status.bug.ready_for_qa}}` with the QA comment surfacing the failure. If the bug is already `{{jira.status.bug.closed}}` (regression caught after sign-off), use `{{jira.transition.bug.back}}` (`closed` -> `ready_for_qa`) or `{{jira.transition.bug.re_open}}` (any -> `open`) per project policy.
      Append the executed transition (or skip reason) to `Stage Results > Reporting > Transition Trail` in `test-session-memory.md`. Never close the ticket yourself; never bypass the substrate slug.
+  5a. **Re-read `assignee` after the transition** — `qa_sign_off` is one of the transitions measured carrying an undocumented assign post-function (2026-09-17), so it can hand the Story to the QA engineer on the way to `qa_approved`. Same rule as Stage 2 step 1b: if the transition moved `assignee`, restore the previous owner and record the post-function in the Transition Trail. `{{jira.qa_assignee}}` is where QA ownership belongs; the native `assignee` is the dev's.
   6. For each BUG_FOUND from Stage 2, file the quality report per `agentic-qa-core/references/defect-management-doctrine.md` (and reporting-templates.md §1):
        a. **CLASSIFY the issue type** — **Bug** (feature already live above Staging, end-user visible) vs **Defect** (feature still pre-release / Staging or below — the normal sprint-testing case) vs **Improvement** (not a broken AC) — by the FEATURE's lifecycle stage, NOT where it was found (Part 1). The create call uses this type; do NOT hardcode `--type Bug`.
        b. [ISSUE_TRACKER_TOOL] Create Issue --type <Bug|Defect|Improvement> with the summary format `<EPIC>: <COMPONENT>: <ISSUE_SUMMARY>` from reporting-templates.md §1.2; populate description, repro steps, evidence links, and the §1.10 field set.

@@ -16,7 +16,7 @@ Every file produced while testing falls into exactly one of three buckets. Misfi
 
 **Bucket B rule — explicit destination, always.** Every capture command MUST receive an explicit destination path resolving to the ticket's `evidence/` folder. Never let a capture fall back to the tool default — that writes to the repo root CWD and clutters the workspace with stray files that look like committed assets. Note the known gotcha: `outputDir` in the automation tool config does NOT apply to screenshots — pass the full path in the capture command's filename argument (see `sprint-testing/references/exploration-patterns.md` §1.1).
 
-**Bucket A rule — hands off the shared config.** Do not repoint the automation tool's `outputDir` mid-session beyond what the active workflow skill instructs; parallel sessions can share it.
+**Bucket A rule — hands off the shared config.** Do not repoint the automation tool's `outputDir`: it stays at the tool-owned directory it ships with (`.playwright/output`), which is what lets parallel sessions share the file. A workflow step that says "set `outputDir` to the ticket's evidence folder before capturing" is a single-session assumption and is superseded by §5. The value is **committed**, so a ticket path written there outlives the ticket: measured 2026-09-17, a repo whose config still pointed at one story's evidence folder cross-contaminated the first unqualified capture of all three concurrent sessions. Find a ticket path there → fix it back to the tool-owned directory once, do not race to overwrite it.
 
 ---
 
@@ -59,3 +59,25 @@ Before ANY report, handoff, or footer lists an evidence file: `ls` the `evidence
 ## 4. Subagent briefing snippet (paste into component 7 — Rules)
 
 > **Evidence rules (mandatory):** every capture command targets the ticket's `evidence/` folder with an explicit full destination path (never the tool default). Name files per `agentic-qa-core/references/evidence-conventions.md` §2. Annotation intermediates (crops, overlay HTML) go to the session scratchpad, never to `evidence/`. In your structured report, list only evidence files you verified exist on disk (`ls`), with repo-relative paths.
+
+---
+
+## 5. Concurrent sessions — isolate the session, never the shared config
+
+When several sessions test different tickets at the same time on one checkout (a QA fleet, or simply two terminals), the automation tool's config file is shared and its `outputDir` is last-writer-wins: session 3 repoints it and session 1's next capture lands in session 3's ticket folder. The §1 Bucket A rule ("hands off the shared config") is what prevents that, and it is not negotiable just because a workflow step says "set `outputDir` before capturing" — that step assumes it is the only session running.
+
+Two things are per-session, and neither one edits the shared config file:
+
+| What | Why | How |
+|---|---|---|
+| **Browser profile / user-data dir** | the shipped config is non-isolated with a single user-data dir; two browsers on one profile directory collide on its lock, and the second one fails or hijacks the first one's state | give each session its own session / profile identifier |
+| **Output destination** | keeps Bucket A noise and any non-explicit capture from crossing into another ticket's folder | a per-session config file, OR simply the Bucket B rule already in force: an explicit full destination on every capture |
+
+Mechanics — the flag or environment variable the installed automation CLI reads for an alternate config, and the shape of the session identifier — belong to that tool's own skill (`/playwright-cli`): load it and use what the installed version documents. Do not invent a flag, and do not hand-edit the shared config to fake isolation.
+
+Two constraints hold whatever the mechanism:
+
+- An alternate config **replaces** the default, it does not merge with it, so a per-session config file must be complete.
+- `outputDir` never applies to `.png`, so a screenshot passes its full destination path regardless — which is why Bucket B's explicit-destination rule already makes *evidence* concurrency-safe even with a shared config. What is left unsafe without isolation is the **browser profile**.
+
+Every session closes its browser sessions before it reports. Orphaned browser processes accumulate per session and are a measured cost (ten orphans at ~2.7 GB, 2026-08-30), not a hypothetical.
