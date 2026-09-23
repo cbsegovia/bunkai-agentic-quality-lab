@@ -9,7 +9,7 @@
  */
 
 import { defineConfig, devices } from '@playwright/test';
-import { config, env } from './config/variables';
+import { config, env } from '@variables';
 
 // Use values from centralized config (no direct process.env access)
 const baseURL = config.baseUrl;
@@ -144,18 +144,33 @@ export default defineConfig({
     },
 
     // ============================================
-    // Smoke Tests - @critical tagged tests from any suite
-    // Usage: bun run test:smoke
+    // Smoke Tests - @critical tagged tests, ONE PROJECT PER SURFACE
+    // Usage: bun run test:smoke  (runs both)
+    //
+    // Split on purpose. A single `smoke` project spanning `{e2e,integration}`
+    // has to pick ONE `use` block, and the UI one hands a browser storageState
+    // (session cookie) to API tests, so "no token" API checks stay
+    // authenticated. A project that spans two surfaces cannot carry one
+    // surface's auth state.
+    //
+    // `smoke-ui` == `e2e` + @critical, `smoke-api` == `integration` + @critical.
     // ============================================
     {
-      name: 'smoke',
+      name: 'smoke-ui',
       grep: /@critical/,
-      testMatch: '**/{e2e,integration}/**/*.test.ts',
-      dependencies: ['ui-setup', 'api-setup'],
+      testMatch: '**/e2e/**/*.test.ts',
+      dependencies: ['ui-setup'],
       use: {
         ...devices['Desktop Chrome'],
         storageState: config.auth.storageStatePath,
       },
+    },
+    {
+      name: 'smoke-api',
+      grep: /@critical/,
+      testMatch: '**/integration/**/*.test.ts',
+      dependencies: ['api-setup'],
+      use: {},
     },
 
     // ============================================

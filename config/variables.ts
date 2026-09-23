@@ -143,6 +143,7 @@ export const config = {
     signinEndpoint: '/v1/auth/signin',
     signupEndpoint: '/v1/auth/signup',
     confirmEndpoint: '/v1/auth/confirm',
+    loginEndpoint: '/v1/auth/signin', // Read by scripts/lib/api-login-core.ts (`bun run api:login`) — same signin call, returns the PAT
     tokenEndpoint: '/v1/auth/signin', // Endpoint to intercept for session (used by page.waitForResponse) — sets cookies, no token in body
     meEndpoint: '/v1/me', // confirmed against synced OpenAPI contract (api/openapi-types.ts) — NOT /v1/auth/me
     tokenLifetimeSeconds: 86400, // 24 hours — Supabase session default; not independently confirmed, verify in Phase 5

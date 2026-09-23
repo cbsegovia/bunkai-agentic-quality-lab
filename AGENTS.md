@@ -544,7 +544,7 @@ Git / PR work → `/git-flow-master` auto-loads. Details in `.agents/skills/git-
 
 This repository uses the `github-flow` strategy: `chore/BK-configure-agents-project-yaml` is the production branch (origin/HEAD); every change is a short-lived prefixed branch merged via PR. Merge = deploy; rollback = revert the PR. This is a CHOSEN strategy (`strategy_source: chosen`, confirmed 2026-08-24 via Strategy Setup), not the inherited default — do not re-offer Strategy Setup here unless the user asks to change the strategy.
 
-### Declared policy vs enforced ruleset
+### Accepted divergence — declared policy vs enforced ruleset
 
 `git_strategy.policy` is declared to match the GitHub host, verified by `bun run git:policy verify` on 2026-08-24: no ruleset actually blocks direct pushes to the production branch, and the `protepublic` ruleset (id `17717836`) carries an always-on bypass (`bypass_actors: RepositoryRole/always`). Unlike a repo with a genuine yaml⇄host divergence, `git_strategy.policy.accepted_divergences` is empty here on purpose: `verify` reports `Declared policy matches the host` with zero drift. Revisit if branch protection is ever tightened on GitHub — that would turn this from "matches" into a real divergence needing an `accepted_divergences` entry.
 

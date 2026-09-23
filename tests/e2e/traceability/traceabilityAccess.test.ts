@@ -17,7 +17,7 @@
 import { test } from '@TestFixture';
 import { TraceabilityPage } from '@ui/TraceabilityPage';
 import { config } from '@variables';
-import { FIXTURE_PROJECT_SLUG } from './fixtures';
+import { FIXTURE_PROJECT_SLUG } from '@/tests/e2e/traceability/fixtures';
 
 let fixtureStoryId: string;
 
