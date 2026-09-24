@@ -3,21 +3,22 @@
   "templateRepo": "upex-galaxy/agentic-qa-boilerplate",
   "templateCommit": "",
   "perComponentCommit": {
-    "skills": "d287bb21d184a8a2001d056ab3edb96085bc3264",
+    "skills": "7902b8cb951e2811ffea2d9de5b57c1927521c2a",
     "commands": "35f296d05ac55452b0db924f34ec37643393d2c9",
-    "scripts": "d287bb21d184a8a2001d056ab3edb96085bc3264",
-    "docs": "d287bb21d184a8a2001d056ab3edb96085bc3264",
-    "cli": "d287bb21d184a8a2001d056ab3edb96085bc3264",
+    "scripts": "7902b8cb951e2811ffea2d9de5b57c1927521c2a",
+    "docs": "7902b8cb951e2811ffea2d9de5b57c1927521c2a",
+    "cli": "7902b8cb951e2811ffea2d9de5b57c1927521c2a",
     "vscode": "b08266ac907637e6d74539d0f396481336dcf113",
-    "husky": "d287bb21d184a8a2001d056ab3edb96085bc3264",
-    "agents-docs": "d287bb21d184a8a2001d056ab3edb96085bc3264",
+    "husky": "7902b8cb951e2811ffea2d9de5b57c1927521c2a",
+    "agents-docs": "7902b8cb951e2811ffea2d9de5b57c1927521c2a",
     "claude-config": "01c0a2f669c592a2bb26b5abc8d112b6eda5da40",
     "tooling": "d287bb21d184a8a2001d056ab3edb96085bc3264",
-    "env-template": "d287bb21d184a8a2001d056ab3edb96085bc3264",
+    "env-template": "7902b8cb951e2811ffea2d9de5b57c1927521c2a",
     "agent-compatibility": "d287bb21d184a8a2001d056ab3edb96085bc3264",
     "codex-config": "35f296d05ac55452b0db924f34ec37643393d2c9",
     "agent-root-config": "35f296d05ac55452b0db924f34ec37643393d2c9",
-    "config-core": "d287bb21d184a8a2001d056ab3edb96085bc3264"
+    "config-core": "7902b8cb951e2811ffea2d9de5b57c1927521c2a",
+    "env-schema": "7902b8cb951e2811ffea2d9de5b57c1927521c2a"
   },
   "syncedComponents": [],
   "ignoreFileSync": {
@@ -39,7 +40,7 @@
       ]
     },
     ".gitignore": {
-      "lastSyncedSha": "a028ad97bf235021090daead91c26f87b14b2e26",
+      "lastSyncedSha": "58ac1b171c867671dd17aa67a8fa178ba761ccb3",
       "appendedLines": [
         "**/evidence/",
         ".template/claude-md.upstream.sha",
@@ -68,14 +69,17 @@
         "!skills-lock.json",
         "!**/skills-lock.json",
         ".template/doctrine-ledger.json",
-        " is GITIGNORED (per-dev record of what the last"
+        " is GITIGNORED (per-dev record of what the last",
+        "!.env.schema",
+        "!.env.core.schema",
+        "env.d.ts"
       ]
     }
   },
   "packageJsonSync": {
     "package.json": {
       "scripts": {
-        "lastSyncedSha": "ee6158e509b7e826e51ffee3e35cfc61fc3fc9dc",
+        "lastSyncedSha": "412acf070efa617d1413bfd43ff24fdef23a5274",
         "appliedKeys": [
           "vars:env:check",
           "env",
@@ -93,26 +97,29 @@
           "harness:env",
           "harness:env:check",
           "jira:baseline",
-          "worktree:provision"
+          "worktree:provision",
+          "vars:schema",
+          "vars:schema:check"
         ]
       },
       "devDependencies": {
-        "lastSyncedSha": "ee6158e509b7e826e51ffee3e35cfc61fc3fc9dc",
+        "lastSyncedSha": "412acf070efa617d1413bfd43ff24fdef23a5274",
         "appliedKeys": [
-          "allure-js-commons"
+          "allure-js-commons",
+          "varlock"
         ]
       },
       "dependencies": {
-        "lastSyncedSha": "ee6158e509b7e826e51ffee3e35cfc61fc3fc9dc",
+        "lastSyncedSha": "412acf070efa617d1413bfd43ff24fdef23a5274",
         "appliedKeys": []
       },
       "lint-staged": {
-        "lastSyncedSha": "ee6158e509b7e826e51ffee3e35cfc61fc3fc9dc",
+        "lastSyncedSha": "412acf070efa617d1413bfd43ff24fdef23a5274",
         "appliedKeys": []
       }
     }
   },
   "cliVersion": "8.4",
-  "lastSyncedAt": "2026-09-23T12:41:18.026Z",
+  "lastSyncedAt": "2026-09-24T13:58:30.884Z",
   "variableSystemVersion": 1
 }
