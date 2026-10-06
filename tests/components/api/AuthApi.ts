@@ -29,11 +29,27 @@ import type { CheckEmailPayload, CheckEmailResponse, ErrorEnvelope, MeResponse, 
 import type { TestContextOptions } from '@TestContext';
 
 import { ApiBase } from '@api/ApiBase';
-import { expect } from '@playwright/test';
+import { expect, request as playwrightRequest } from '@playwright/test';
 import { atc, step } from '@utils/decorators';
 
 // Re-export types for consumers that import from AuthApi
 export type { CheckEmailPayload, CheckEmailResponse, ErrorEnvelope, MeResponse, SigninPayload, SigninResponse } from '@schemas/auth.types';
+
+// ============================================
+// Scoped PAT types (BK-258)
+// ============================================
+
+/** One capability a PAT can be minted with (from the signin contract). */
+export type PatScope = NonNullable<SigninPayload['pat_scopes']>[number];
+
+/** A short-lived PAT minted in its own cookie jar, with its own cleanup. */
+export interface ScopedPat {
+  token: string
+  id: string
+  scopes: PatScope[]
+  /** Revokes the PAT with the session of the context that minted it, then disposes that context. Never throws. */
+  revoke: () => Promise<void>
+}
 
 // ============================================
 // Auth API Component
@@ -73,6 +89,68 @@ export class AuthApi extends ApiBase {
       { email },
     );
     return [response, body];
+  }
+
+  /**
+   * Helper: mint a PAT restricted to the given scopes, in a standalone
+   * request context (its own cookie jar) so the calling test's context never
+   * receives the signin session cookie.
+   *
+   * Setup-only, no @atc. The PAT self-expires in 1 day as a safety net; the
+   * returned `revoke()` removes it earlier. PATs cannot revoke tokens (403
+   * "Use a browser session", spike S4), so revocation uses the minting
+   * context's cookie session.
+   */
+  @step
+  async mintScopedPat(args: { scopes: PatScope[] }): Promise<ScopedPat> {
+    const { email, password } = this.config.testUser;
+    const context = await playwrightRequest.newContext();
+
+    try {
+      const signinResponse = await context.post(this.apiEndpoint(this.config.auth.signinEndpoint), {
+        headers: this.requestHeaders,
+        data: {
+          email,
+          password,
+          pat_name: `bk258-qa-${this.data.createTestId('pat')}`,
+          pat_scopes: args.scopes,
+          pat_expires_in_days: 1,
+        } satisfies SigninPayload,
+        timeout: this.config.browser.defaultTimeout,
+      });
+      expect(signinResponse.status()).toBe(200);
+
+      const body = (await signinResponse.json()) as SigninResponse;
+      expect(body.pat.scopes).toEqual(args.scopes);
+
+      return {
+        token: body.pat.token,
+        id: body.pat.id,
+        scopes: body.pat.scopes,
+        revoke: async () => {
+          try {
+            const revokeResponse = await context.delete(this.apiEndpoint(`/v1/tokens/${body.pat.id}`), {
+              headers: this.requestHeaders,
+              timeout: this.config.browser.defaultTimeout,
+            });
+            // 404 = already revoked; any other non-2xx leaves a live PAT behind.
+            if (!revokeResponse.ok() && revokeResponse.status() !== 404) {
+              console.warn(`[mintScopedPat] PAT revoke failed: status=${revokeResponse.status()} tokenId=${body.pat.id} (self-expires in 1 day)`);
+            }
+          }
+          catch {
+            // Best-effort cleanup: the PAT self-expires after 1 day.
+          }
+          finally {
+            await context.dispose();
+          }
+        },
+      };
+    }
+    catch (error) {
+      await context.dispose();
+      throw error;
+    }
   }
 
   // ============================================

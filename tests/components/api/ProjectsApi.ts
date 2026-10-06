@@ -14,7 +14,7 @@
  */
 
 import type { APIResponse } from '@playwright/test';
-import type { CreateProjectPayload, CreateProjectResponse } from '@schemas/project.types';
+import type { ArchiveModuleResponse, CreateModulePayload, CreateModuleResponse, CreateProjectPayload, CreateProjectResponse } from '@schemas/project.types';
 import type { TestContextOptions } from '@TestContext';
 
 import { ApiBase } from '@api/ApiBase';
@@ -22,7 +22,7 @@ import { expect } from '@playwright/test';
 import { step } from '@utils/decorators';
 
 // Re-export types for consumers that import from ProjectsApi
-export type { CreateProjectPayload, CreateProjectResponse } from '@schemas/project.types';
+export type { ArchiveModuleResponse, CreateModulePayload, CreateModuleResponse, CreateProjectPayload, CreateProjectResponse } from '@schemas/project.types';
 
 // ============================================
 // Projects API Component
@@ -54,6 +54,34 @@ export class ProjectsApi extends ApiBase {
       payload,
     );
     expect(response.status()).toBe(201);
+    return [response, body];
+  }
+
+  /**
+   * Helper: seed a Module under a project (BK-258 Home open-bugs data).
+   * Fails fast (asserts 201).
+   */
+  @step
+  async createModuleSuccessfully(
+    args: { projectId: string, payload: CreateModulePayload },
+  ): Promise<[APIResponse, CreateModuleResponse]> {
+    const [response, body] = await this.apiPOST<CreateModuleResponse, CreateModulePayload>(
+      `/v1/projects/${args.projectId}/modules`,
+      args.payload,
+    );
+    expect(response.status()).toBe(201);
+    return [response, body];
+  }
+
+  /**
+   * Helper: archive a module and its subtree (soft delete). Cleanup for tests
+   * that seed bugs: bugs of an archived module drop out of the open-bugs count.
+   * Fails fast (asserts 200).
+   */
+  @step
+  async archiveModuleSuccessfully(moduleId: string): Promise<[APIResponse, ArchiveModuleResponse]> {
+    const [response, body] = await this.apiDELETE<ArchiveModuleResponse>(`/v1/modules/${moduleId}`);
+    expect(response.status()).toBe(200);
     return [response, body];
   }
 }
