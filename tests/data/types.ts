@@ -39,6 +39,25 @@ export interface TestProject {
   description?: string
 }
 
+export interface TestModule {
+  name: string
+  description?: string
+}
+
+export interface TestBug {
+  title: string
+  severity: 'P1' | 'P2' | 'P3' | 'P4'
+  steps_to_reproduce?: string
+}
+
+export interface OpenBugsCounts {
+  total: number
+  P1: number
+  P2: number
+  P3: number
+  P4: number
+}
+
 // ============================================
 // Auth/Fixture State Types
 // ============================================

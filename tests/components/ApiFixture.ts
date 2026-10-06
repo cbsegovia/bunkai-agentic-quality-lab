@@ -18,6 +18,8 @@ import type { TestContextOptions } from '@TestContext';
 
 import { ApiBase } from '@api/ApiBase';
 import { AuthApi } from '@api/AuthApi';
+import { BugsApi } from '@api/BugsApi';
+import { OpenBugsApi } from '@api/OpenBugsApi';
 import { ProjectsApi } from '@api/ProjectsApi';
 import { TraceabilityApi } from '@api/TraceabilityApi';
 import { UserStoryApi } from '@api/UserStoryApi';
@@ -39,6 +41,12 @@ export class ApiFixture extends ApiBase {
   /** Projects component - BK-266 setup helper (seed projects) */
   readonly projects: ProjectsApi;
 
+  /** Open bugs component - BK-258 workspace open-bugs read (BK-1100, BK-1101) */
+  readonly openBugs: OpenBugsApi;
+
+  /** Bugs component - BK-258 setup helpers (file a bug, advance its status) */
+  readonly bugs: BugsApi;
+
   constructor(options: TestContextOptions) {
     super(options);
 
@@ -47,6 +55,8 @@ export class ApiFixture extends ApiBase {
     this.userStory = new UserStoryApi(options);
     this.traceability = new TraceabilityApi(options);
     this.projects = new ProjectsApi(options);
+    this.openBugs = new OpenBugsApi(options);
+    this.bugs = new BugsApi(options);
   }
 
   // ============================================
@@ -63,6 +73,8 @@ export class ApiFixture extends ApiBase {
     this.userStory.setAuthToken(token);
     this.traceability.setAuthToken(token);
     this.projects.setAuthToken(token);
+    this.openBugs.setAuthToken(token);
+    this.bugs.setAuthToken(token);
   }
 
   /**
@@ -74,5 +86,7 @@ export class ApiFixture extends ApiBase {
     this.userStory.clearAuthToken();
     this.traceability.clearAuthToken();
     this.projects.clearAuthToken();
+    this.openBugs.clearAuthToken();
+    this.bugs.clearAuthToken();
   }
 }

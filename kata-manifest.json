@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-09-23T12:41:18.155Z",
+  "generatedAt": "2026-10-06T23:13:26.270Z",
   "components": {
     "api": [
       {
@@ -11,12 +11,35 @@
           {
             "id": "BK-101",
             "method": "authenticateSuccessfully",
-            "line": 101
+            "line": 179
           },
           {
             "id": "BK-102",
             "method": "signInWithInvalidCredentials",
-            "line": 137
+            "line": 215
+          }
+        ]
+      },
+      {
+        "name": "BugsApi",
+        "file": "BugsApi.ts",
+        "relativePath": "tests/components/api/BugsApi.ts",
+        "atcs": []
+      },
+      {
+        "name": "OpenBugsApi",
+        "file": "OpenBugsApi.ts",
+        "relativePath": "tests/components/api/OpenBugsApi.ts",
+        "atcs": [
+          {
+            "id": "BK-1100",
+            "method": "expectOpenBugsContract",
+            "line": 79
+          },
+          {
+            "id": "BK-1101",
+            "method": "expectAccessDecision",
+            "line": 101
           }
         ]
       },
@@ -67,6 +90,18 @@
       }
     ],
     "ui": [
+      {
+        "name": "HomePage",
+        "file": "HomePage.ts",
+        "relativePath": "tests/components/ui/HomePage.ts",
+        "atcs": [
+          {
+            "id": "BK-1093",
+            "method": "showsOpenBugTotalWithSeverityBreakdown",
+            "line": 74
+          }
+        ]
+      },
       {
         "name": "LoginPage",
         "file": "LoginPage.ts",
@@ -269,10 +304,10 @@
   },
   "steps": [],
   "summary": {
-    "totalComponents": 8,
-    "totalATCs": 41,
-    "apiComponents": 4,
-    "uiComponents": 4,
+    "totalComponents": 11,
+    "totalATCs": 44,
+    "apiComponents": 6,
+    "uiComponents": 5,
     "stepsModules": 0
   }
 }

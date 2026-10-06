@@ -9,7 +9,7 @@
  *   - Import directo: import { DataFactory } from '@DataFactory'
  */
 
-import type { TestCredentials, TestProject, TestUser, TestUserStory } from '@data/types';
+import type { TestBug, TestCredentials, TestModule, TestProject, TestUser, TestUserStory } from '@data/types';
 
 import { faker } from '@faker-js/faker';
 
@@ -98,6 +98,29 @@ export class DataFactory {
   static createProject(overrides?: Partial<TestProject>): TestProject {
     return {
       name: `Test Project ${this.uniqueId()}`,
+      ...overrides,
+    };
+  }
+
+  /**
+   * Genera datos de Module para testing (BK-258).
+   * Nombre 2-80 chars, siempre único para no chocar con el path de un hermano.
+   */
+  static createModule(overrides?: Partial<TestModule>): TestModule {
+    return {
+      name: `BK258 Module ${this.uniqueId()}`,
+      ...overrides,
+    };
+  }
+
+  /**
+   * Genera datos de Bug standalone para testing (BK-258).
+   * Título 5-200 chars; severidad P3 por defecto.
+   */
+  static createBug(overrides?: Partial<TestBug>): TestBug {
+    return {
+      title: `[BK-258 QA] ${faker.lorem.words(4)}`,
+      severity: 'P3',
       ...overrides,
     };
   }
