@@ -11,6 +11,7 @@
  * - Chip per level:   [data-testid="home-open-bugs-severity-P1"] .. P4
  *                     text pattern `P{n} {Critical|Major|Minor|Trivial} {count}`
  * - Loading:          [data-testid="home-open-bugs-skeleton"]
+ * - Zero state:       [data-testid="home-open-bugs-empty"] (replaces the chips)
  */
 
 import type { OpenBugsCounts } from '@data/types';
@@ -56,6 +57,24 @@ export class HomePage extends UiBase {
     await this.page.goto(this.buildUrl('/home'));
   }
 
+  /**
+   * Point the BROWSER at a workspace. The active workspace is the httpOnly
+   * `bk_active_ws` cookie, set by this POST in the page's own cookie jar. It
+   * goes through `page.request` on purpose: it sends the session cookie and no
+   * bearer, and a PAT gets 403 on this endpoint (an Api-class helper would
+   * attach the PAT unless the caller cleared it first). Only the per-test
+   * browser context changes; the server-side active workspace of the user is
+   * untouched.
+   *
+   * @param workspaceId - workspace the Home card must render
+   */
+  @step
+  async selectWorkspace(workspaceId: string): Promise<void> {
+    const url = `${this.config.apiUrl.replace(/\/$/, '')}/v1/me/active-workspace`;
+    const response = await this.page.request.post(url, { data: { workspace_id: workspaceId } });
+    expect(response.ok(), `selecting workspace ${workspaceId} failed with HTTP ${response.status()}`).toBe(true);
+  }
+
   // ============================================
   // ATCs - Complete Test Cases
   // ============================================
@@ -86,5 +105,54 @@ export class HomePage extends UiBase {
 
     // The card matched every expected figure above, so this is the total/breakdown identity on what it renders.
     expect(expected.total).toBe(expected.P1 + expected.P2 + expected.P3 + expected.P4);
+  }
+
+  /**
+   * ATC: The Home "Open bugs" card shows the expected total and the P3 (Minor)
+   * chip. Starts on /home (navigation is the separate `open()` helper).
+   *
+   * Only meaningful while the workspace has at least one open bug: with zero
+   * open bugs the card swaps the chips for the empty message, so the P3 chip
+   * would not exist. The test asserts that precondition before calling this.
+   *
+   * @param expected - total and P3 count the card must show
+   * @param expected.total - workspace open bug total shown by the card
+   * @param expected.P3 - count shown on the P3 Minor chip
+   */
+  @atc('BK-1094')
+  async showsCountedBugTotalAndMinorChip(expected: { total: number, P3: number }): Promise<void> {
+    await this.waitForCardSettled();
+
+    await expect(this.page.locator('[data-testid="home-open-bugs-count"]')).toHaveText(String(expected.total));
+
+    const chip = this.page.locator('[data-testid="home-open-bugs-severity-P3"]');
+    await expect(chip).toBeVisible();
+    await expect(chip).toHaveText(new RegExp(`^P3\\s*${SEVERITY_LABELS.P3}\\s*${expected.P3}$`));
+  }
+
+  /**
+   * ATC: The Home "Open bugs" card shows the zero state: total 0, the all-clear
+   * message and no severity chips. Starts on /home (navigation is the separate
+   * `open()` helper).
+   */
+  @atc('BK-1096')
+  async showsZeroStateWithoutSeverityChips(): Promise<void> {
+    await this.waitForCardSettled();
+
+    await expect(this.page.locator('[data-testid="home-open-bugs-count"]')).toHaveText('0');
+    await expect(this.page.locator('[data-testid="home-open-bugs-empty"]')).toHaveText('Nothing outstanding right now.');
+    await expect(this.page.locator('[data-testid="home-open-bugs-severities"]')).toHaveCount(0);
+  }
+
+  // ============================================
+  // Private helpers
+  // ============================================
+
+  /**
+   * The loading placeholder is awaited away BEFORE any count is read: while the
+   * Suspense skeleton is attached the count test id can resolve to two elements.
+   */
+  private async waitForCardSettled(): Promise<void> {
+    await expect(this.page.locator('[data-testid="home-open-bugs-skeleton"]')).toHaveCount(0);
   }
 }
