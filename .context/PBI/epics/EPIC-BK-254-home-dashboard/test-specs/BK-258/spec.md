@@ -86,3 +86,7 @@ None. Observation for Stage 4 owners: TC8 rows "bearer token" and "PAT atc:read"
 - [ ] Tests pass on staging (`bun run test` for the three files, zero retries)
 - [ ] `types:check`, `lint:check` and `kata:manifest:check` clean
 - [ ] Every created bug, module and PAT is cleaned up (archive module, revoke PATs); workspace baseline restored
+
+## Second pass (BK-1094, BK-1096)
+
+Planned in `automation-plan-pass2.md` with ATC specs `atc/BK-1094.md` and `atc/BK-1096.md`. Each TC passed a "worth automating?" gate first: BK-1094 AUTOMATE (4 rows, one ATC); BK-1096 SPLIT (zero-state render against the existing fixture workspace, conditional on spikes W1 and W2; rows "only resolved/closed" and "open in archived module" stay manual). BK-1095 and BK-1099 remain deferred.
