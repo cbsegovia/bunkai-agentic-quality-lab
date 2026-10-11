@@ -395,6 +395,11 @@ function processSkill(slug: string): SkillEntry {
     }
   }
 
+  // A rule copied from a SKILL.md can carry a link relative to that skill's folder
+  // (`](references/x.md)`). In REGISTRY.md it would resolve against `.agents/skills/`
+  // and be dead, so anchor it to the skill folder.
+  rules = rules.map(rule => rule.replace(/\]\((?!https?:|#|\/|\.{1,2}\/|mailto:)([^)\s]+)\)/g, `](${slug}/$1)`));
+
   const readFullWhen = extractReadFullWhen(body);
   const purpose = distillPurpose(frontmatter.description);
 

@@ -106,7 +106,9 @@ orchestration:
 updater:
   # scripts/sync-jira-issues.ts carries a project patch: it accepts `A | B` alternatives in
   # `jira_issue_type` so the localized type name "Historia" is synced as "Story".
-  protected_paths: [scripts/sync-jira-issues.ts] # e.g. [scripts/lint-vars.ts, .agents/skills/acli/SKILL.md]
+  # scripts/build-skill-registry.ts carries another: a link copied from a community skill is
+  # anchored to that skill's folder, so REGISTRY.md has no dead relative links.
+  protected_paths: [scripts/sync-jira-issues.ts, scripts/build-skill-registry.ts] # e.g. [scripts/lint-vars.ts, .agents/skills/acli/SKILL.md]
   # Upstream deny rules this project does NOT want appended to `.claude/settings.json`.
   # An entry listed here, by its exact text, is left out and reported as declined. Read
   # directly by the updater (`readDeclinedDenies` in cli/lib/updater-settings.ts), skipped

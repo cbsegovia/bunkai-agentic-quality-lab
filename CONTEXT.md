@@ -109,7 +109,7 @@ Two systems, two consumers, two lifecycles. Use the right substrate for the righ
 └── master-test-plan.md        → What to test and why                (/master-test-plan)
 ```
 
-> **TMS configuration**: modality (Xray vs Jira-native) is derived from `.agents/project.yaml` `testing.tms_cli`. Regression Epic and label taxonomy are auto-discovered live by `/test-documentation` Phase 0 + Preflight. IQL methodology reference lives in `docs/methodology/jira-platform.md`.
+> **TMS configuration**: modality (Xray vs Jira-native) is derived from `.agents/project.yaml` `testing.tms_cli`. Regression Epic and label taxonomy are auto-discovered live by `/test-documentation` Phase 0 + Preflight. The IQL methodology reference is the `iql-context` skill.
 
 Workflow instructions and role-specific guidelines (TAE, QA, MCP usage) now live inside agent skills under `.claude/skills/`.
 
@@ -148,12 +148,9 @@ Workflow instructions and role-specific guidelines (TAE, QA, MCP usage) now live
 
 ```
 docs/
-├── agentic-quality-engineering.md → Top-level entry point: vision, principles, lifecycle overview
-├── architectures/                 → Target application architecture
-├── methodology/                   → Testing methodology (IQL, KATA phases)
-├── setup/                         → Setup guides (MCP, tools)
-├── testing/                       → Testing guides (API, DB, automation)
-└── workflows/                     → Workflow guides (git, environments)
+├── index.html  → Portal: entry point to the human pages
+├── core/       → Human pages (getting started, environment variables, personality)
+└── assets/     → Shared styles and scripts of the pages
 ```
 
 > Context engineering strategy has moved to `CONTEXT.md` at the repo root (alongside `README.md`, `CLAUDE.md`, `INSTALLER.md`).
@@ -328,6 +325,4 @@ Reference / utility / generator skills (`agentic-qa-core`, `acli`, `xray-cli`, `
 
 ---
 
-> **You are here**: Context Engineering map for AI agents in the QA repo. **Read time**: 15 min. **Next**: [`docs/agentic-quality-engineering.md`](docs/agentic-quality-engineering.md).
-
-**Last Updated**: 2026-04-26
+> **You are here**: Context Engineering map for AI agents in the QA repo. **Read time**: 15 min. **Next**: [`docs/index.html`](docs/index.html).

@@ -1,6 +1,6 @@
 # Skill Registry (auto-generated)
 
-> Generated: `2026-10-11T00:35:25.965Z`
+> Generated: `2026-10-11T01:23:20.006Z`
 > Generator: `bun scripts/build-skill-registry.ts`
 > Protocol: `.agents/skills/agentic-qa-core/references/skill-resolver.md`
 
@@ -400,16 +400,16 @@ Skills indexed: 29
 **Compact Rules**:
 - Page URL: https://example.com/
 - Page Title: Example Domain
-- **Running and Debugging Playwright tests** [references/playwright-tests.md](references/playwright-tests.md)
-- **Request mocking** [references/request-mocking.md](references/request-mocking.md)
-- **Running Playwright code** [references/running-code.md](references/running-code.md)
-- **Browser session management** [references/session-management.md](references/session-management.md)
-- **Spec-driven testing (plan / generate / heal)** [references/spec-driven-testing.md](references/spec-driven-testing.md)
-- **Storage state (cookies, localStorage)** [references/storage-state.md](references/storage-state.md)
-- **Test generation** [references/test-generation.md](references/test-generation.md)
-- **Tracing** [references/tracing.md](references/tracing.md)
-- **Video recording** [references/video-recording.md](references/video-recording.md)
-- **Inspecting element attributes** [references/element-attributes.md](references/element-attributes.md)
+- **Running and Debugging Playwright tests** [references/playwright-tests.md](playwright-cli/references/playwright-tests.md)
+- **Request mocking** [references/request-mocking.md](playwright-cli/references/request-mocking.md)
+- **Running Playwright code** [references/running-code.md](playwright-cli/references/running-code.md)
+- **Browser session management** [references/session-management.md](playwright-cli/references/session-management.md)
+- **Spec-driven testing (plan / generate / heal)** [references/spec-driven-testing.md](playwright-cli/references/spec-driven-testing.md)
+- **Storage state (cookies, localStorage)** [references/storage-state.md](playwright-cli/references/storage-state.md)
+- **Test generation** [references/test-generation.md](playwright-cli/references/test-generation.md)
+- **Tracing** [references/tracing.md](playwright-cli/references/tracing.md)
+- **Video recording** [references/video-recording.md](playwright-cli/references/video-recording.md)
+- **Inspecting element attributes** [references/element-attributes.md](playwright-cli/references/element-attributes.md)
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
@@ -537,15 +537,15 @@ Skills indexed: 29
 - Error JSON goes to stderr, success JSON goes to stdout:
 - Use `--api-key` or `RESEND_API_KEY` env var. Never rely on interactive login.
 - All `delete`/`rm` commands require `--yes` in non-interactive mode.
-- **Sending or reading emails** → [references/emails.md](references/emails.md)
-- **Setting up or verifying a domain** → [references/domains.md](references/domains.md)
-- **Managing API keys** → [references/api-keys.md](references/api-keys.md)
-- **Creating or sending broadcasts** → [references/broadcasts.md](references/broadcasts.md)
-- **Managing contacts, segments, or topics** → [references/contacts.md](references/contacts.md), [references/segments.md](references/segments.md), [references/topics.md](references/topics.md)
-- **Defining contact properties** → [references/contact-properties.md](references/contact-properties.md)
-- **Working with templates** → [references/templates.md](references/templates.md)
-- **Viewing API request logs** → [references/logs.md](references/logs.md)
-- **Creating automations or sending events** → [references/automations.md](references/automations.md)
+- **Sending or reading emails** → [references/emails.md](resend-cli/references/emails.md)
+- **Setting up or verifying a domain** → [references/domains.md](resend-cli/references/domains.md)
+- **Managing API keys** → [references/api-keys.md](resend-cli/references/api-keys.md)
+- **Creating or sending broadcasts** → [references/broadcasts.md](resend-cli/references/broadcasts.md)
+- **Managing contacts, segments, or topics** → [references/contacts.md](resend-cli/references/contacts.md), [references/segments.md](resend-cli/references/segments.md), [references/topics.md](resend-cli/references/topics.md)
+- **Defining contact properties** → [references/contact-properties.md](resend-cli/references/contact-properties.md)
+- **Working with templates** → [references/templates.md](resend-cli/references/templates.md)
+- **Viewing API request logs** → [references/logs.md](resend-cli/references/logs.md)
+- **Creating automations or sending events** → [references/automations.md](resend-cli/references/automations.md)
 - (truncated — read full SKILL.md for the rest)
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
