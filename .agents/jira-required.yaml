@@ -384,7 +384,10 @@ link_types:
 # discovered by the sync.
 work_types:
   story:
-    jira_issue_type: Story
+    # `A | B` = ordered alternatives (same syntax as `subtask` below). The BK instance
+    # returns the localized name "Historia" on issue payloads while the workflow catalog
+    # keeps "Story"; declaring both lets jira:sync-issues match either spelling.
+    jira_issue_type: Story | Historia
     description: User story / feature work item
     sync: default
     content: split

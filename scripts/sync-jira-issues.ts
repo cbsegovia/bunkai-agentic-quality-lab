@@ -301,7 +301,10 @@ type ContentMode = 'split' | 'single' | 'description' | 'auto';
 
 interface WorkTypeEntry {
   slug: string
+  /** Canonical name: the first alternative declared in `jira_issue_type`. */
   jiraIssueType: string
+  /** Every spelling declared in `jira_issue_type` (`A | B`), canonical first. */
+  jiraIssueTypeAliases: string[]
   sync: SyncMode
   recommended: boolean
   coverable: boolean
@@ -316,6 +319,8 @@ interface Registry {
   list: WorkTypeEntry[]
   byJiraType: Map<string, WorkTypeEntry>
   bySlug: Map<string, WorkTypeEntry>
+  /** Declared alias -> canonical issue type name (only aliases that differ from the canonical). */
+  canonicalType: Map<string, string>
 }
 
 /** Folder-name prefixes per work-type slug (preserves the existing on-disk filenames). */
@@ -444,7 +449,9 @@ function loadRegistry(): Registry {
       for (const [slug, raw] of Object.entries(workTypes as Record<string, unknown>)) {
         if (!raw || typeof raw !== 'object') { continue; }
         const e = raw as Record<string, unknown>;
-        const jiraIssueType = typeof e.jira_issue_type === 'string' ? e.jira_issue_type.trim() : '';
+        const declared = typeof e.jira_issue_type === 'string' ? e.jira_issue_type : '';
+        const jiraIssueTypeAliases = declared.split('|').map(name => name.trim()).filter(Boolean);
+        const jiraIssueType = jiraIssueTypeAliases[0] ?? '';
         if (!jiraIssueType) { continue; }
 
         const role: 'atp' | 'atr' | null = e.role === 'atp' ? 'atp' : e.role === 'atr' ? 'atr' : null;
@@ -458,6 +465,7 @@ function loadRegistry(): Registry {
         list.push({
           slug,
           jiraIssueType,
+          jiraIssueTypeAliases,
           sync,
           recommended: e.recommended === true,
           coverable: e.coverable === true,
@@ -473,11 +481,15 @@ function loadRegistry(): Registry {
 
   const byJiraType = new Map<string, WorkTypeEntry>();
   const bySlug = new Map<string, WorkTypeEntry>();
+  const canonicalType = new Map<string, string>();
   for (const e of list) {
-    byJiraType.set(e.jiraIssueType, e);
+    for (const alias of e.jiraIssueTypeAliases) {
+      byJiraType.set(alias, e);
+      if (alias !== e.jiraIssueType) { canonicalType.set(alias, e.jiraIssueType); }
+    }
     bySlug.set(e.slug, e);
   }
-  REGISTRY_CACHE = { list, byJiraType, bySlug };
+  REGISTRY_CACHE = { list, byJiraType, bySlug, canonicalType };
   return REGISTRY_CACHE;
 }
 
@@ -1038,6 +1050,27 @@ async function jiraFetch<T>(
   return response.json() as Promise<T>;
 }
 
+/**
+ * Rewrites a localized issue type name ("Historia") to the canonical one declared first
+ * in `jira_issue_type` ("Story"), on the issue and on its linked issues. The rest of the
+ * script compares against the canonical English names, so normalizing once at ingestion
+ * keeps those comparisons valid on instances that return localized type names.
+ */
+function canonicalizeIssueTypes<T extends JiraIssue>(issue: T): T {
+  const { canonicalType } = loadRegistry();
+  if (canonicalType.size === 0) { return issue; }
+  const fix = (type: JiraIssueType | undefined) => {
+    const canonical = type ? canonicalType.get(type.name) : undefined;
+    if (type && canonical) { type.name = canonical; }
+  };
+  fix(issue.fields?.issuetype);
+  for (const link of issue.fields?.issuelinks ?? []) {
+    fix(link.inwardIssue?.fields?.issuetype);
+    fix(link.outwardIssue?.fields?.issuetype);
+  }
+  return issue;
+}
+
 async function searchIssues(
   config: Config,
   jql: string,
@@ -1065,7 +1098,7 @@ async function searchIssues(
       },
     );
 
-    allIssues.push(...response.issues);
+    allIssues.push(...response.issues.map(canonicalizeIssueTypes));
 
     if (response.isLast || !response.nextPageToken) {
       hasMorePages = false;
@@ -1079,10 +1112,10 @@ async function searchIssues(
 }
 
 async function fetchIssue(config: Config, key: string, fields: string[]): Promise<JiraIssue> {
-  return jiraFetch<JiraIssue>(
+  return canonicalizeIssueTypes(await jiraFetch<JiraIssue>(
     config,
     `/rest/api/3/issue/${key}?fields=${fields.join(',')}`,
-  );
+  ));
 }
 
 async function fetchComments(config: Config, key: string): Promise<JiraComment[]> {
