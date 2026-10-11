@@ -153,11 +153,15 @@ Extends `TestContext`. Adds Playwright helpers: response interception, network w
 
 Rule: anything that needs `PageContext` goes in UiBase; anything needing `APIRequestContext` goes in ApiBase; anything agnostic (allure attachments, string helpers) goes in `tests/utils/`.
 
+**Why E2E API calls carry the browser session.** `ApiBase`'s `request` getter returns `this._page.request` whenever a page exists and falls back to the standalone `APIRequestContext` only in API-only fixtures (`tests/components/api/ApiBase.ts`). `page.request` shares cookies and storage with the browser, so under `{ test }` or `{ ui }` an API call is authenticated by the UI session cookie. That is the mechanism, not the fixtures sharing an options object. Consequence: a negative auth test (clear the Bearer token, expect 401) belongs under `{ api }`, where no cookie exists; under `{ test }` the cookie still authenticates and the test gets 200.
+
 ---
 
 ## 5. Domain Components (Layer 3)
 
 One component per file. Max 15–20 ATCs per component — split if larger.
+
+Sizing heuristics. A component groups conceptually related ATCs, has a name that says what is in it, and does not depend on other components. Split it when any of these shows up: more than ~500 lines, unrelated responsibilities in one class, a specific ATC is hard to find, or the name no longer describes the content.
 
 | Type | Class | File |
 |------|-------|------|
@@ -359,16 +363,25 @@ test('TICKET-ID: should persist session after login', async ({ test }) => {
 
 | Type | What it does | `@atc` |
 |------|-------------|--------|
-| Helper | Retrieves data (read-only, no state change) | No — optional `@step` for tracing |
-| ATC | Performs an action that changes state | Yes — `@atc('TICKET-ID')` |
+| Helper | A GET that only prepares data or reads context another step needs | No — optional `@step` for tracing |
+| ATC | An action that changes state, OR a GET whose response IS the business outcome under test | Yes — `@atc('TICKET-ID')` |
 
-A GET that validates access control (403/401) is still a helper — the ATC is the action that established the context. The GET belongs *inside* the ATC as a verification step.
+The question is whether the GET is the subject of the test case. When the TC's expected result is what a read endpoint returns (the right business data and shape, 401 without auth, 403 for the wrong role, 404 for an unknown id), that GET is an ATC: `api-patterns.md` §5 names one ATC per expected outcome, reads included. A GET that only fetches data for a later step is a helper. A GET that confirms an action's effect belongs *inside* that action's ATC as a verification step. A GET whose only assertion is status 200 verifies no business outcome, so it is a disguised helper, not an ATC (`planning-playbook.md`, "Disguised helpers").
 
 ```typescript
-// WRONG — bare GET as an ATC
-@atc('TICKET-ID') async getCurrentUserUnauthorized() { ... }
+// WRONG — a data-preparation GET wearing @atc (no business outcome asserted)
+@atc('TICKET-ID') async getOrderForCheckout(id: string) { /* status 200 only */ }
 
-// RIGHT — GET embedded inside the real action
+// RIGHT — the GET is the outcome under test (access control on a read endpoint)
+@atc('TICKET-ID')
+async getCurrentUserUnauthorized(): Promise<[APIResponse, ApiErrorResponse]> {
+  const [response, body] = await this.apiGET<ApiErrorResponse>('/auth/me');
+  expect(response.status()).toBe(401);
+  expect(body.error).toBeDefined();
+  return [response, body];
+}
+
+// RIGHT — a GET confirming an action stays inside that action's ATC
 @atc('TICKET-ID')
 async loginWithInvalidCredentials(credentials: LoginPayload) {
   const [loginResp] = await this.apiPOST('/auth/login', credentials);
@@ -609,3 +622,17 @@ async getCurrentUser() { ... }
 Never apply decorators to Layer 2 base methods or private helpers. Detailed tracing mechanics live in a separate tracing reference.
 
 `bun run kata:manifest` extracts every component and ATC into `kata-manifest.json`. **MUST be loaded before proposing any new Component or ATC** — Critical Rule #12 in `AGENTS.md`. The manifest is authoritative; the file system is not. Husky enforces freshness on commit (`bun run kata:manifest:check`), so the committed manifest is always trustworthy as the registry of record.
+
+---
+
+## 11. Migrating an existing suite to KATA
+
+For a project that already has Playwright tests and adopts this boilerplate. One area at a time; the old tests keep running until their replacement is proven.
+
+1. **Find ATC candidates.** Read the current tests for blocks that repeat, map each to a Jira/Xray test case, and start with the most reused. Check `kata-manifest.json` first (Critical Rule #12): the boilerplate may already ship the component.
+2. **Adapt Layers 1-2, do not rewrite them.** `TestContext`, `ApiBase` and `UiBase` ship in `tests/components/`; wire your URLs and credentials through `config/variables.ts` and `.env` (`/test-framework-adaptation` does this).
+3. **Extract the first component.** Pick one functional area, create `{Resource}Api` or `{Page}Page`, move its methods in as ATCs with `@atc('{TICKET-ID}')`, helpers with `@step`.
+4. **Register it in the fixture.** Add it to `ApiFixture` / `UiFixture` (`tests/components/`), then rewrite ONE test to use `{ api }` / `{ ui }` / `{ test }` per the fixture selection table (§7).
+5. **Migrate progressively.** One component per change, legacy tests running in parallel, each new ATC shown to behave like the code it replaces before the legacy code goes. Run `bun run kata:manifest` after each.
+6. **Turn on traceability last.** Once ATCs carry real ticket ids, enable the TMS write-back (`AUTO_SYNC`, see `ci-integration.md` §5) and confirm the first synced run in Jira/Xray.
+

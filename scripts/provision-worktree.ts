@@ -5,7 +5,7 @@
  * worktree shares every TRACKED file with the primary checkout (same repo,
  * different branch) but starts with none of the gitignored state a session
  * needs: `.env`, the `.claude/skills` alias, gitignored T3 community skills,
- * `node_modules/`, and `.auth/`. See the gap table in
+ * `node_modules/`, `.auth/`, and the synced `api/openapi.json`. See the gap table in
  * `.agents/skills/orca-orchestration/references/provisioning.md` for the full
  * rationale per item.
  *
@@ -28,9 +28,13 @@
  * fails, `bun run agents:compat` fails).
  */
 
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { platform } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
+
+// Node built-ins only on the other side, so this static import works before
+// `bun install` has run in the worktree being provisioned.
+import { HARNESS_ENV_BACKUP_DIR, OPENCODE_SECRET_DIR, PROVISION_COPIES } from '../cli/lib/worktree.ts';
 
 const PREFIX = '[provision-worktree]';
 
@@ -56,13 +60,22 @@ function showHelp(): void {
 
 \x1B[1mWHAT IT DOES\x1B[0m
   1. Refuses to run if [path] resolves to the PRIMARY checkout.
-  2. Copies .env, .claude/settings.local.json, .auth/ (mode 0600; chmod
-     skipped on Windows).
+  2. Copies every gitignored input a worktree cannot rebuild, each only when
+     the primary has it: .env, .env.local, .claude/settings.local.json,
+     .auth/, api/.openapi-config.json, the local MCP overrides (mode 0600;
+     chmod skipped on Windows), api/openapi.json and
+     .template/installer.state.json. One list, PROVISION_COPIES in
+     cli/lib/worktree.ts, which .worktreeinclude mirrors.
   3. Runs \`bun install --frozen-lockfile\` inside the target.
   4. Runs \`bun run agents:compat\` inside the target (creates the
      .claude/skills alias).
   5. Copies gitignored T3 skill directories under .agents/skills/.
-  6. Prints a summary + a hint to run \`bun run context:hydrate\` for the
+  6. Creates an EMPTY .auth/opencode/<VAR> placeholder for every {file:}
+     reference a LEGACY opencode.jsonc carries that the .auth/ copy did not
+     supply (a missing target breaks OpenCode's whole config). A config on the
+     .env loader has none. .auth/opencode/ itself is copied only for such a
+     config, and the retirement backup (.auth/harness-env-backup/) never is.
+  7. Prints a summary + a hint to run \`bun run context:hydrate\` for the
      .context/PBI/ cache (not copied — it is per-session Jira state).
 
   Never copies .session/ — see the file header for why.
@@ -162,46 +175,49 @@ function secureChmodRecursive(target: string): void {
   }
 }
 
-function secureCopyFile(relPath: string): void {
-  const src = join(PRIMARY, relPath);
+/** `.auth/` children a worktree must not inherit (see `cli/lib/harness-env.ts`). */
+const RETIRED_COPIES = new Set([
+  HARNESS_ENV_BACKUP_DIR,
+  ...(opencodeReadsFileRefs(TARGET) ? [] : [OPENCODE_SECRET_DIR]),
+].map(path => path.split('/').join(sep)));
+
+/** True while the TARGET's opencode.jsonc still carries a legacy `{file:.auth/opencode/...}` reference. */
+function opencodeReadsFileRefs(root: string): boolean {
+  const path = join(root, 'opencode.jsonc');
+  return existsSync(path) && readFileSync(path, 'utf8').includes(`{file:${OPENCODE_SECRET_DIR}/`);
+}
+
+// Every entry is optional: a project with no API never syncs a spec, and most
+// developers have no `.env.local`. Absence is info, never a warning, except for
+// `.env`, without which every MCP server in the worktree starts with nothing.
+for (const entry of PROVISION_COPIES) {
+  const shown = entry.kind === 'dir' ? `${entry.path}/` : entry.path;
+  const src = join(PRIMARY, entry.path);
   if (!existsSync(src)) {
-    log(`Skipping ${relPath} (not present in primary checkout)`, 'warn');
-    skipped.push(relPath);
-    return;
+    log(`Skipping ${shown} (not present in primary checkout)`, entry.path === '.env' ? 'warn' : 'info');
+    skipped.push(shown);
+    continue;
   }
   if (dryRun) {
-    log(`Would copy ${relPath} (mode 0600)`, 'info');
-    return;
+    log(`Would copy ${shown}${entry.secret ? ' (mode 0600)' : ''}`, 'info');
+    continue;
   }
-  const dest = join(TARGET, relPath);
+  const dest = join(TARGET, entry.path);
   mkdirSync(dirname(dest), { recursive: true });
-  copyFileSync(src, dest);
-  if (!IS_WINDOWS) { chmodSync(dest, 0o600); }
-  log(`Copied ${relPath}`, 'success');
-  copied.push(relPath);
-}
-
-function secureCopyDir(relPath: string): void {
-  const src = join(PRIMARY, relPath);
-  if (!existsSync(src)) {
-    log(`Skipping ${relPath}/ (not present in primary checkout)`, 'warn');
-    skipped.push(`${relPath}/`);
-    return;
+  if (entry.kind === 'dir') {
+    // Never propagate a plaintext MCP credential copy the loader made obsolete:
+    // the retirement backup always stays behind, and `.auth/opencode/` travels
+    // only while the worktree's own opencode.jsonc still points at it.
+    cpSync(src, dest, { recursive: true, filter: source => !RETIRED_COPIES.has(relative(PRIMARY, source)) });
+    if (entry.secret) { secureChmodRecursive(dest); }
   }
-  if (dryRun) {
-    log(`Would copy ${relPath}/ (mode 0600/0700)`, 'info');
-    return;
+  else {
+    copyFileSync(src, dest);
+    if (entry.secret && !IS_WINDOWS) { chmodSync(dest, 0o600); }
   }
-  const dest = join(TARGET, relPath);
-  cpSync(src, dest, { recursive: true });
-  secureChmodRecursive(dest);
-  log(`Copied ${relPath}/`, 'success');
-  copied.push(`${relPath}/`);
+  log(`Copied ${shown}`, 'success');
+  copied.push(shown);
 }
-
-secureCopyFile('.env');
-secureCopyFile('.claude/settings.local.json');
-secureCopyDir('.auth');
 
 // ============================================
 // bun install --frozen-lockfile + bun run agents:compat, inside TARGET
@@ -263,6 +279,28 @@ for (const name of t3SkillDirs) {
   cpSync(join(PRIMARY, relPath), dest, { recursive: true });
   log(`Copied ${relPath}/ (T3 community skill)`, 'success');
   copied.push(`${relPath}/`);
+}
+
+// ============================================
+// OpenCode placeholders: every {file:} target must EXIST, even empty
+// ============================================
+
+// Covers a primary that never ran `bun run setup`: its `.auth/` copy (or its
+// absence) supplies nothing, and OpenCode then throws `bad file reference …
+// does not exist` on the whole config. Existing files are never touched.
+//
+// Dynamic import, placed AFTER `bun install`: `cli/lib/harness-env.ts` imports
+// `cli/install.ts`, which needs third-party packages. As an Orca setup hook
+// this script runs FROM the fresh worktree, whose node_modules do not exist
+// until step 3 above, so a static import would crash at module load.
+if (dryRun) {
+  log('Would create empty .auth/opencode/<VAR> placeholders for any {file:} reference in opencode.jsonc that .auth/ did not supply', 'info');
+}
+else {
+  const { ensureOpencodePlaceholders } = await import('../cli/lib/harness-env.ts');
+  const placeholders = ensureOpencodePlaceholders(TARGET);
+  if (placeholders.error) { log(`opencode.jsonc could not be scanned for {file:} references: ${placeholders.error}`, 'warn'); }
+  log(`OpenCode placeholders: ${placeholders.created.length} created empty (${placeholders.created.join(', ') || 'none'}), ${placeholders.kept.length} kept from .auth/`, placeholders.created.length > 0 ? 'success' : 'info');
 }
 
 // ============================================

@@ -89,7 +89,7 @@ Only overwrite on explicit user confirmation.
 
 ## API context — deferred to dedicated tools
 
-`project-discovery` no longer generates `.context/api-architecture.md` end-to-end. The work is split across two tools that each own one angle:
+`project-discovery` no longer generates `api-architecture.md` end-to-end. The work is split across two tools that each own one angle:
 
 - **Technical endpoint sync** — run `bun run api:sync` (script: `scripts/sync-openapi.ts`). It downloads an OpenAPI / Swagger spec from a URL, GitHub repo, or local file and generates TypeScript types under `api/schemas/`. Use this whenever you need exact request/response shapes for tests, components, or AI grounding. *If the project has no OpenAPI spec, surface that as a Discovery Gap and ask the user to expose one or skip technical sync.*
 

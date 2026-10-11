@@ -39,7 +39,7 @@ orca skills installed
 ```
 
 These are **optional and never required**. The stubs teach WHEN, not HOW; the grammar is served by
-the binary on demand (`orca skills get <topic>`), which is what this repo's references ask for on the DEEP topics; the stubs themselves are loaded, not fetched (AGENTS.md §5).
+the binary on demand (`orca skills get <topic>`), which is what this repo's references ask for on the DEEP topics; the stubs themselves are loaded, not fetched (`.agents/instructions/agent-skills-and-mcps.md`).
 Install them if you want the user-level trigger words; skip them and nothing breaks.
 
 Note `orca skills install --local` installs into the current project instead of globally. In THIS
@@ -49,13 +49,14 @@ untracked skill directory and collide with the repo's own tier model. Global (th
 
 ---
 
-## 3 · The two native-launch prerequisites
+## 3 · The native-launch prerequisites
 
-These two items decide whether **supervision** is available on this machine at all, so they are not
-optional extras. The native launch (`worker-start --agent <agent> --model <id> --effort <level>`) is
+Item 3.1 decides whether **supervision** is available on this machine at all, so it is not an
+optional extra; item 3.2 decides whether a supervised worker has its credentials, and needs nothing
+per machine. The native launch (`worker-start --agent <agent> --model <id> --effort <level>`) is
 the ONLY supervised one: the runtime recognizes only agents it started itself, so a terminal created
 from our own command line can never be adopted (`references/gotchas.md` G44). A machine that has not
-done both items below can still run a fleet, but every worker on it is unsupervised.
+done item 3.1 can still run a fleet, but every worker on it is unsupervised.
 
 ### 3.1 · The agent's default arguments (permission mode)
 
@@ -76,8 +77,9 @@ Two things to know before relying on it:
   Those are broader than what a worker needs. The auto-mode classifier belongs to Claude Code, not
   to the runtime, and that classifier is the thing worth keeping alive (gotcha G27).
 - For any agent other than `claude`, **consult that agent's own documentation** for its equivalent.
-  Verified on this machine: OpenCode exposes `--auto` (auto-approve permissions not explicitly
-  denied). For Codex, do not guess a flag — read its docs, then write the verified value here.
+  OpenCode exposes `--auto` (auto-approve permissions not explicitly denied); confirm it with
+  `opencode --help` on the machine. For Codex, do not guess a flag — read its docs, then write the
+  verified value here.
 - **(unverified)** the exact label of the settings section and the field, which may differ per app
   version. Read the screen, do not trust this sentence.
 
@@ -85,52 +87,69 @@ Until that override exists on a machine, a native worker launches in whatever mo
 per-agent default gives it, which is the trap gotcha G27 describes. Neither the repo nor a teammate's
 machine can tell whether you did it, which is the whole problem with a non-versionable setting.
 
-### 3.2 · direnv, so a supervised worker has credentials
+### 3.2 · Credentials for a supervised worker: the `.env` loader
 
-A launch line can export variables; the native launch cannot, because it has no argv. What it has is
-Orca's **interactive shell**, and that is the whole seam: with direnv installed and hooked into that
-shell, an `.envrc` that sources the repo's env file fires when the worker's terminal opens, and the
-worker starts with credentials. Measured 2026-09-17: a direct probe showed
-`direnv: export +ATLASSIAN_API_TOKEN +ATLASSIAN_EMAIL …` and then the probe variable reading `SET`.
+A launch line can export variables; the native launch cannot, because it has no argv. So no MCP
+server depends on the launch: every one that needs `.env` values starts through the `.env` loader
+declared in `.mcp.json`, `opencode.jsonc` and `.codex/config.toml` (`varlock run ... --filter <its
+vars> -- <server>`, ADR-0011), which reads the varlock schema plus `.env` / `.env.local` from the
+worktree root when the harness spawns the server. NO shell is involved, for Claude Code, OpenCode
+and Codex workers alike. Nothing here is set per machine: what this item needs is the worktree's own
+`.env`, which provisioning copies.
 
-Without direnv, the same command produces a supervised worker with NO credentials **and nothing
-reports it**. It fails much later, at its first authenticated call, with an error that reads like a
-broken tool (gotcha G45).
+- **What the worker needs is its own `.env`.** `bun run worktree:provision` copies it from the
+  primary. A worktree without one hands every server empty values, and the hook says so on the
+  first prompt.
+- **The plaintext copies an older `bun run harness:env` generated** (the `env` block of
+  `.claude/settings.local.json`, `.auth/opencode/<VAR>`) are retired by the current one.
+  `bun run worktree:provision` copies `.auth/opencode/` only while the worktree's `opencode.jsonc`
+  still has `{file:}` references, and never copies `.auth/harness-env-backup/`.
+- **Every other process a worker runs loads its own config too; no secret is ever exported into
+  the worker's shell.** Bun scripts (`bun run jira:*`, `bun run api:login`, `bun xray`, the acli
+  helper scripts) read `.env` through Bun's autoload; `acli` uses its own stored auth and `gh` its
+  keyring; a raw `curl` that needs `ATLASSIAN_EMAIL` / `ATLASSIAN_API_TOKEN` runs inside
+  `bunx varlock run --filter ATLASSIAN_EMAIL,ATLASSIAN_API_TOKEN -- sh -c '...'`; an app-API `curl`
+  runs `source .auth/tokens.env` in the same command. Secret-manager mode: Bun's autoload does not
+  resolve 1Password references, so such a script runs through `bunx varlock run -- <cmd>`.
 
 ```bash
-command -v direnv                                # the hook must be installed AND hooked into the shell
-cat .envrc                                       # must source the repo's env file; never commit secrets here
-direnv allow                                     # once per checkout, per machine
+# after every .env change: restart the agent session (MCP servers read .env at spawn)
+test -f .env && echo present || echo MISSING     # in the worker's worktree: presence only, never the content
+# Claude Code: /mcp lists every server connected; the other harnesses: their own server listing
 ```
 
-Two rules that follow from this being per-machine and invisible:
+Two rules that follow:
 
 - The conductor **verifies credentials on the worker's screen** before sending it any work
-  (`references/coordinator-playbook.md` §1 step 5). Readiness is not capability.
-- `.envrc` is a per-machine convenience, not a repo contract. Nothing in this repo may depend on it
-  existing: the custom-argv line loads the env file through the repo's own wrapper instead, and that
-  is why the human-paste path needs none of this.
+  (`references/coordinator-playbook.md` §1 step 5), whichever harness it runs: its MCP servers
+  connected and its worktree holding `.env`. Readiness is not capability.
+- Nothing in this repo may depend on a secret exported into a shell: the custom-argv line starts the
+  harness binary bare, exactly like the native launch, so the human-paste path relies on the same
+  loaders listed above and needs the same worktree `.env`.
 
 ---
 
-## 4 · The setup hook → the provisioning script
+## 4 · The setup and archive hooks → the committed `orca.yaml`
+
+The repo commits `orca.yaml`: `scripts.setup` runs `bun run worktree:provision` in every new worktree
+and `scripts.archive` runs `bun run worktree:audit --rescue` before one is removed
+(`references/provisioning.md` §3). Nothing is set per machine, but three per-machine things decide
+whether it runs, so read them once:
 
 ```bash
 orca repo list --json </dev/null
-orca repo show --repo <selector> --json </dev/null     # read the CURRENT setup command + policy
+orca repo show --repo <selector> --json </dev/null     # registered hooks + source policy
 ```
 
-Today the registered setup command for this repo installs dependencies only, which covers exactly
-one of the seven gaps a fresh worktree has (`references/provisioning.md` §1). Point it at the
-provisioning script instead and six close automatically:
+- The source policy in the repository's Hooks settings must not be local-only, or `orca.yaml` is
+  ignored. A local script set before `orca.yaml` existed (often `bun install`) is redundant now.
+- Approve the trust prompt the first time each hook runs; it asks again when the script changes.
+- Keep the setup policy at run-by-default, so a new worktree provisions itself before the agent
+  starts.
 
-- In the app: the repository's settings → the setup script field → `bun run worktree:provision`.
-- Keep the setup policy at run-by-default, so a newly created worktree provisions itself before the
-  agent starts.
-
-**This setting is UI-only** (gotcha G24): the CLI does not expose it, the machine-readable command
-schema has no command for it, and desktop automation is blocked by the OS permission model on
-macOS. It cannot be scripted and it cannot be versioned.
+A machine where the committed hooks cannot run falls back to setting the setup script field in the
+app to `bun run worktree:provision` (UI only, gotcha G24) and running the audit by hand before every
+removal.
 
 ---
 
@@ -153,9 +172,10 @@ find out during a real fleet, and record it in `references/gotchas.md`.
 [ ] Settings -> Agents: `claude` default args include `--permission-mode auto`
     (prerequisite of the SUPERVISED native launch; a pasted custom-argv line needs nothing)
 [ ] other agents: their documented equivalent, verified, not guessed
-[ ] direnv installed, hooked into the shell, `.envrc` sources the env file, `direnv allow` run
-    (the only way a native worker gets credentials; verify on the worker's screen at launch)
-[ ] repo setup script set to `bun run worktree:provision`, policy run-by-default
+[ ] the worktree has its own `.env` and the session restarted after the last `.env` change (every
+    MCP server reads it through the `.env` loader; verify its servers connected on the worker's
+    screen at launch)
+[ ] `orca.yaml` hooks honoured: source policy not local-only, trust approved, setup run-by-default
 [ ] (optional) phone paired
 [ ] a single test worker launched and released end to end BEFORE a real fleet
 ```

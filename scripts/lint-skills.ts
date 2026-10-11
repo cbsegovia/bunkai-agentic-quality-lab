@@ -11,7 +11,7 @@
  *         (gitignored, fetched at install time, NOT committed)
  *   T4  — community user-level, declared in cli/install.ts:USER_LEVEL_SKILLS
  *
- * Seventeen checks are run; each violation is printed prefixed with the relevant
+ * The checks below are run; each violation is printed prefixed with the relevant
  * skill or array name. Exit code 0 = pass (no ERROR violations), 1 = at least
  * one ERROR violation. WARN and INFO are reported but do not cause non-zero exit.
  *
@@ -41,7 +41,8 @@
  *      regression-testing, test-documentation), EXCEPT inside the
  *      "Forbidden invocations" section which legitimately mentions it.
  *
- *   7. TIER-MISMATCH — skill named in AGENTS.md §5 but absent from
+ *   7. TIER-MISMATCH — skill named in the §5 skill router table
+ *      (`.agents/instructions/agent-skills-and-mcps.md`, else AGENTS.md) but absent from
  *      cli/install.ts matching tier array, or vice versa. T1 + T4 skills
  *      exempt (T1 lives in .agents/skills/; T4 is auto-discovered at runtime).
  *      install.ts is the tier authority for community skills: one committed
@@ -55,9 +56,19 @@
  *      bodies AND each skill's references/*.md (outside fenced code blocks)
  *      must resolve to existing files relative to the skill dir or repo root.
  *      Known gitignored artifacts + illustrative example paths are exempted
- *      via STALE_PATH_ALLOWED; the example components `/adapt-framework`
+ *      via STALE_PATH_ALLOWED; the example components `/test-framework-adaptation`
  *      deletes are exempted via EXAMPLE_ARTIFACTS, so a skill body that cites
- *      one passes here AND in an adapted repo. ERROR severity.
+ *      one passes here AND in an adapted repo. `.context/` is checked too,
+ *      with a kind-scoped rule: inside a `metadata.kind: context` skill every
+ *      `.context/` cite must exist (a context skill citing a dead map is the
+ *      failure mode the check exists for; only the gitignored Jira cache
+ *      `.context/PBI/` is exempt), while in every other skill the outputs the
+ *      generators write per project, plus the legacy discovery outputs a
+ *      project may still hold (CONTEXT_GENERATED_PREFIXES: project-config.md,
+ *      the legacy PRD / SRS / business / infrastructure files, the legacy
+ *      master test plan, skill reports) are exempt in both directions, because
+ *      they do not exist in the boilerplate checkout.
+ *      ERROR severity.
  *
  *   9. DUPLICATE-TIER — a skill slug appearing in more than one of
  *      PROJECT_LEVEL_SKILLS, USER_LEVEL_SKILLS is an install conflict.
@@ -100,13 +111,71 @@
  *      `KIND_SUFFIX_EXEMPT` predate the rule and skip it. `workflow` and
  *      `core` carry no suffix rule. ERROR severity.
  *
+ *  18. CAPABILITY-VOCAB — every name in `metadata.requires_capabilities` (the
+ *      MCP capabilities a skill needs, declared by CAPABILITY and resolved by
+ *      tool-name suffix, never by server prefix) must be in
+ *      `KNOWN_CAPABILITIES`, the mirror of
+ *      agentic-qa-core/references/mcp-capabilities.md §2. Inline `[a, b]` and
+ *      block `- a` list forms are both read. ERROR severity.
+ *
+ *  19. CAPABILITY-UNDECLARED — heuristic half of the correspondence rule
+ *      (mcp-capabilities.md §3): a T1 SKILL.md BODY (not its references/, and
+ *      outside fenced code blocks) that carries one of the five resolution
+ *      tags in `CAPABILITY_TAGS` (`[DB_TOOL]`, `[API_TOOL]`,
+ *      `[AUTOMATION_TOOL]`, `[DOCS_TOOL]`, `[WEB_SEARCH_TOOL]`) without
+ *      declaring the matching capability. A tag in a legend table trips it,
+ *      so the fix is "declare it or drop the row", never a script allowlist.
+ *      The reverse (declared but no tag) is NOT checked: skills legitimately
+ *      instruct use through tool names or MCP names instead of tags. A skill
+ *      of kind `core` is skipped: it hosts the doctrine that describes the
+ *      tags and never uses them. WARN severity.
+ *
+ *  20. FILE-LINE — a `path.ext:N` / `:N-M` / `#LN` citation in the prose of any
+ *      committed markdown under .agents/ (community skills and generated
+ *      aggregates excluded) or in AGENTS.md, outside fenced blocks and the
+ *      frontmatter. A line number shifts on any edit above it; cite the file
+ *      plus a symbol or a heading. Per-line escape: `volatile-ok: <reason>`.
+ *      Severity: VOLATILE_SEVERITY (Critical Rule #17; canon
+ *      agentic-qa-core/references/volatile-facts.md).
+ *
+ *  21. CURRENT-STATE — a claim about the present in the same prose: "today",
+ *      "currently", "as of <year>", a dated "measured / verified", "since
+ *      <version>", a measured token or byte size, a tool version after a tool
+ *      name, and the Spanish equivalents. Same exclusions and escape hatch.
+ *      Severity: VOLATILE_SEVERITY.
+ *
+ *  22. STAGE-OWNER-DISPATCH — a SKILL.md whose frontmatter declares
+ *      `metadata.stage_owner: true` (the stage-owning workflow skills, the set
+ *      AGENTS.md §3 used to enumerate by hand) must carry a
+ *      `## Subagent Dispatch Strategy` section. ERROR severity.
+ *
+ *  23. CONTEXT-WRITES — the write scope a skill declares in `metadata.writes`
+ *      (skill-scaffold.md §2, the context-kind amendment). Only a
+ *      `metadata.kind: context` skill may declare it; every entry must be the
+ *      skill's own `references/` folder or a path under it; a context skill
+ *      that declares it must carry `references/refresh.md` (the procedure the
+ *      write path runs); and neither its SKILL.md nor that procedure may carry
+ *      the Jira resolution tags (`[ISSUE_TRACKER_TOOL]`, `[TMS_TOOL]`): a
+ *      context skill edits its own map, never a tracker. ERROR severity.
+ *
+ *  24. T4-LOADER — every slug in cli/install.ts:USER_LEVEL_SKILLS must have a
+ *      row in the "Loaded by / when" table of `agentic-qa-onboard/SKILL.md`
+ *      §"Community skills installed at user level", and the row's loader cell
+ *      must either cite its loader in backticks (the skill or doctrine that
+ *      names this T4 skill for a moment, which is what lets it load without
+ *      asking: skill-composition-strategy.md §3.2) or say "user-invoked only".
+ *      No-op when USER_LEVEL_SKILLS is empty. ERROR severity.
+ *
  * Usage: bun run scripts/lint-skills.ts   (or: bun run skills:check)
  */
 
+import type { VolatileKind } from './lib/volatile-facts';
 import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join } from 'node:path';
 
+import { dirname, join } from 'node:path';
+import { skillRouterSource } from './lib/instructions';
 import { relativePosix } from './lib/posix-path';
+import { isVolatileExemptPath, scanVolatile, volatileRemedy } from './lib/volatile-facts';
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -118,6 +187,10 @@ const REPO_ROOT = process.env.LINT_SKILLS_ROOT ?? join(import.meta.dir, '..');
 const SKILLS_DIR = join(REPO_ROOT, '.agents/skills');
 const INSTALL_TS = join(REPO_ROOT, 'cli/install.ts');
 const AGENTS_MD = join(REPO_ROOT, 'AGENTS.md');
+// The skill router table: `.agents/instructions/agent-skills-and-mcps.md`, or
+// `AGENTS.md` in a repo that has not split its instructions yet.
+const SKILL_ROUTER = skillRouterSource(REPO_ROOT);
+const SKILL_ROUTER_LABEL = `${SKILL_ROUTER?.rel ?? 'AGENTS.md'} §5`;
 
 /**
  * Authoritative category list — mirrors §5.1 of
@@ -148,15 +221,25 @@ const KNOWN_CATEGORIES = new Set([
 const KNOWN_KINDS = new Set(['context', 'workflow', 'utility', 'core']);
 
 /**
+ * Severity of the two volatile-facts checks (20-21). Both are ERROR: the
+ * hand-applied cleanup left no residue outside a `volatile-ok: <reason>` line
+ * or a `volatile-ok-file: <reason>` dated ledger, so a new hit is a regression.
+ */
+const VOLATILE_SEVERITY: Record<VolatileKind, Severity> = {
+  'FILE-LINE': 'ERROR',
+  'CURRENT-STATE': 'ERROR',
+};
+
+/**
  * Slugs exempt from KIND-SUFFIX (check 17), in both directions. Every entry
  * predates the suffix rule and is grandfathered BY NAME so the exemption stays
  * visible here instead of hiding in a looser regex:
  *   - `acli`: a utility without the `-cli` / `-tool` / `-app` suffix.
- *   - `project-context`, `sync-ai-context`: workflows whose slug ends
- *     `-context` (the suffix the `context` kind reserves).
+ *   - `project-context`: a workflow whose slug ends `-context` (the suffix
+ *     the `context` kind reserves).
  * A new skill picks a slug that matches its kind; it does not get added here.
  */
-const KIND_SUFFIX_EXEMPT = new Set<string>(['acli', 'project-context', 'sync-ai-context']);
+const KIND_SUFFIX_EXEMPT = new Set<string>(['acli', 'project-context']);
 
 /**
  * Suffix ⇔ kind table for KIND-SUFFIX (check 17), enforced both ways: a slug
@@ -168,6 +251,31 @@ const KIND_SUFFIX_RULES: ReadonlyArray<{ kind: string, suffixes: readonly string
   { kind: 'context', suffixes: ['-context'] },
   { kind: 'utility', suffixes: ['-cli', '-tool', '-app'] },
 ];
+
+/**
+ * MCP capability vocabulary (`metadata.requires_capabilities`) — mirrors §2 of
+ * .agents/skills/agentic-qa-core/references/mcp-capabilities.md. A skill
+ * declares the CAPABILITY it needs, never a server name, so the project
+ * `.mcp.json` server, a user-level server and a claude.ai connector all
+ * satisfy it. Add a name here AND in the reference, in the same change. Check 18.
+ */
+const KNOWN_CAPABILITIES = new Set(['web-search', 'library-docs', 'db', 'api-schema', 'diagrams']);
+
+/**
+ * Resolution tag → capability it resolves to (`.agents/instructions/agent-tool-resolution.md`). Drives the
+ * CAPABILITY-UNDECLARED heuristic (check 19): a SKILL.md body using the tag
+ * without declaring the capability is a WARN. `[AUTOMATION_TOOL]` is absent on
+ * purpose: it resolves to `/playwright-cli`, a CLI, so no MCP capability backs it.
+ */
+const CAPABILITY_TAGS: ReadonlyArray<{ tag: string, capability: string }> = [
+  { tag: '[DB_TOOL]', capability: 'db' },
+  { tag: '[API_TOOL]', capability: 'api-schema' },
+  { tag: '[DOCS_TOOL]', capability: 'library-docs' },
+  { tag: '[WEB_SEARCH_TOOL]', capability: 'web-search' },
+];
+
+/** Jira resolution tags a context skill with a write scope must never carry (check 23). */
+const JIRA_WRITE_TAGS = ['[ISSUE_TRACKER_TOOL]', '[TMS_TOOL]'];
 
 /**
  * QA workflow skills subject to the anti-leak rule (check 6). The "Forbidden
@@ -296,19 +404,27 @@ interface SkillFrontmatter {
   categoriesField: CategoriesField
   /** `metadata.kind` (purpose axis); undefined when the nested key is absent. */
   kind?: string
+  /** `metadata.stage_owner: true` marks a stage-owning workflow skill (AGENTS.md §3 compliance). */
+  stageOwner: boolean
+  /** `metadata.requires_capabilities` (MCP capabilities); undefined when the nested key is absent. */
+  requiresCapabilities?: string[]
+  /** `metadata.writes` (a context skill's own write scope); undefined when the nested key is absent. */
+  writes?: string[]
   raw: string
 }
 
 /**
  * Extracts the YAML frontmatter (between leading `---` fences) and pulls out
- * `name`, `complementary_categories` and `metadata.kind`. We only need a tiny
- * subset, so we do not pull in a YAML dependency — the format we expect is:
+ * `name`, `complementary_categories`, `metadata.kind` and
+ * `metadata.requires_capabilities`. We only need a tiny subset, so we do not
+ * pull in a YAML dependency — the format we expect is:
  *
  *   ---
  *   name: foo
  *   complementary_categories: [a, b, c]
  *   metadata:
  *     kind: workflow
+ *     requires_capabilities: [db, api-schema]
  *   ---
  *
  * If the categories field uses block-list YAML (- a / - b), we also handle
@@ -365,13 +481,42 @@ function parseFrontmatter(content: string): SkillFrontmatter | null {
   // `metadata` is the extension point the Agent Skills frontmatter spec allows,
   // so `kind` is never read from the top level.
   let kind: string | undefined;
+  let stageOwner = false;
+  let requiresCapabilities: string[] | undefined;
+  let writes: string[] | undefined;
   const metadataMatch = block.match(/^metadata:[ \t]*\n((?:[ \t]+\S[^\n]*\n?)+)/m);
   if (metadataMatch) {
     const kindMatch = metadataMatch[1].match(/^[ \t]+kind:[ \t]*["']?([\w-]+)["']?/m);
     if (kindMatch) { kind = kindMatch[1]; }
+    stageOwner = /^[ \t]+stage_owner:[ \t]*true\b/m.test(metadataMatch[1]);
+    requiresCapabilities = parseNestedList(metadataMatch[1], 'requires_capabilities');
+    writes = parseNestedList(metadataMatch[1], 'writes');
   }
 
-  return { name, categoriesField, kind, raw: block };
+  return { name, categoriesField, kind, stageOwner, requiresCapabilities, writes, raw: block };
+}
+
+/**
+ * Reads one list-valued key out of an indented `metadata:` block, in either
+ * form: inline `  key: [a, b]` or block `  key:\n    - a\n    - b`. Returns
+ * undefined when the key is absent (so "not declared" and "declared empty"
+ * stay distinguishable); quotes around a value are stripped.
+ */
+function parseNestedList(metadataBlock: string, key: string): string[] | undefined {
+  const inline = metadataBlock.match(new RegExp(`^[ \\t]+${key}:[ \\t]*\\[([^\\]]*)\\]`, 'm'));
+  if (inline) {
+    return inline[1].split(',').map(v => v.trim().replace(/^["']|["']$/g, '')).filter(v => v.length > 0);
+  }
+  const blockList = metadataBlock.match(new RegExp(`^[ \\t]+${key}:[ \\t]*\\n((?:[ \\t]+-[ \\t]+\\S[^\\n]*\\n?)+)`, 'm'));
+  if (blockList) {
+    const values: string[] = [];
+    for (const line of blockList[1].split('\n')) {
+      const m = line.match(/^[ \t]+-[ \t]+(.+)$/);
+      if (m) { values.push(m[1].trim().replace(/^["']|["']$/g, '')); }
+    }
+    return values;
+  }
+  return metadataBlock.match(new RegExp(`^[ \\t]+${key}:`, 'm')) ? [] : undefined;
 }
 
 // -----------------------------------------------------------------------------
@@ -518,12 +663,13 @@ interface AgentsMdSkillEntry {
 
 const AGENTS_MD_SKILL_ROW = /^\|\s*`([\w-]+)`\s*\|/;
 const AGENTS_MD_H2 = /^## (.+)$/;
+const AGENTS_MD_H3 = /^### (.+)$/;
 
 /**
  * Detects whether an H2 heading line belongs to §5 (Skills registry).
  * Matches headings that start with "5." or are exactly "5" followed by
  * optional punctuation/whitespace, e.g.:
- *   "5. SKILLS + COMMANDS + MCPs REGISTRY"
+ *   "5. SKILLS + MODES + MCPs REGISTRY"
  *   "5 Skills"
  */
 function isSection5Heading(heading: string): boolean {
@@ -543,6 +689,9 @@ function parseAgentsMdSkillsRegistry(agentsMdPath: string): {
   // the regex from matching table rows in other sections (e.g., §11 git-branches
   // table which has | `main` | and | `staging` | rows).
   let inSection5 = false;
+  // §5 also hosts the alias and capability tables; only the `### Skills` H3
+  // (or a §5 with no H3 at all) carries skill rows.
+  let inSkillsTable = true;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -550,10 +699,16 @@ function parseAgentsMdSkillsRegistry(agentsMdPath: string): {
     const h2Match = line.match(AGENTS_MD_H2);
     if (h2Match) {
       inSection5 = isSection5Heading(h2Match[1]);
+      inSkillsTable = true;
+      continue;
+    }
+    const h3Match = line.match(AGENTS_MD_H3);
+    if (h3Match) {
+      inSkillsTable = /^skills\b/i.test(h3Match[1].trim());
       continue;
     }
 
-    if (!inSection5) { continue; }
+    if (!inSection5 || !inSkillsTable) { continue; }
 
     const rowMatch = line.match(AGENTS_MD_SKILL_ROW);
     if (rowMatch) {
@@ -564,7 +719,7 @@ function parseAgentsMdSkillsRegistry(agentsMdPath: string): {
   if (entries.length === 0) {
     return {
       entries: [],
-      parseError: 'AGENTS.md §5 table extracted 0 skill rows — format may have drifted',
+      parseError: `${SKILL_ROUTER_LABEL} table extracted 0 skill rows — format may have drifted`,
     };
   }
   return { entries };
@@ -581,7 +736,7 @@ function checkTierMismatch(
   const agentsNames = new Set(agentsEntries.map(e => e.name));
 
   // T4 USER_LEVEL_SKILLS are auto-discovered at runtime and MUST NOT appear in
-  // AGENTS.md §5 by doctrine (see skill-composition-strategy.md §10). Exclude
+  // the §5 skill router table by doctrine (see skill-composition-strategy.md §10). Exclude
   // them from this check; include only T2 + T3 in the install-side set.
   const checkedSlugs = new Set<string>([...t2Slugs, ...t3Slugs]);
 
@@ -593,7 +748,7 @@ function checkTierMismatch(
       result.push({
         severity: 'WARN',
         scope: entry.name,
-        msg: `TIER-MISMATCH: skill is in AGENTS.md §5 (line ${entry.sourceLine}) but absent from cli/install.ts tier arrays`,
+        msg: `TIER-MISMATCH: skill is in ${SKILL_ROUTER_LABEL} (line ${entry.sourceLine}) but absent from cli/install.ts tier arrays`,
       });
     }
   }
@@ -605,7 +760,7 @@ function checkTierMismatch(
       result.push({
         severity: 'WARN',
         scope: slug,
-        msg: 'TIER-MISMATCH: skill is in cli/install.ts tier arrays but absent from AGENTS.md §5',
+        msg: `TIER-MISMATCH: skill is in cli/install.ts tier arrays but absent from ${SKILL_ROUTER_LABEL}`,
       });
     }
   }
@@ -620,7 +775,49 @@ function stripFencedCodeBlocks(md: string): string {
 }
 
 const INLINE_CODE_PATH
-  = /`((?:\.claude\/skills|scripts|cli|\.agents|tests|api)\/[\w./-]+)`/g;
+  = /`((?:\.claude\/skills|scripts|cli|\.agents|tests|api|\.context)\/[\w./-]+)`/g;
+
+/** Why a legacy discovery output (`.context/PRD/`, `SRS/`, ...) is exempt: it is input now, never written. */
+const LEGACY_DISCOVERY_OUTPUT = 'legacy discovery output a project may still hold, no longer written; read as generator input by the context map skills (CONTEXT_MAP_SKILLS)';
+
+/**
+ * `.context/` paths a generator writes per project, or a legacy output a
+ * project may still hold, named by the generator that owns (or once owned)
+ * them. Discovery's synthesis now lives in the context map skills
+ * (`CONTEXT_MAP_SKILLS`, cli/lib/context-maps.ts), which read the legacy files
+ * as generator input and never delete them. None of these exist in the
+ * boilerplate checkout (the committed `.context/` tree holds only the ADRs,
+ * the README files and the PBI templates), yet the workflow skills cite them
+ * legitimately, so outside a context skill they are exempt in BOTH directions,
+ * present or absent, exactly like EXAMPLE_ARTIFACTS. Inside a
+ * `metadata.kind: context` skill the exemption does NOT apply: the scaffold
+ * requires the map to exist before the skill is born, so a cite that does not
+ * resolve there is the dead-map citation this check is for. `.context/PBI/`
+ * stays exempt everywhere: it is the gitignored Jira mirror.
+ */
+const CONTEXT_GENERATED_PREFIXES: ReadonlyArray<{ prefix: string, generator: string }> = [
+  { prefix: '.context/PBI/', generator: 'scripts/sync-jira-issues.ts (gitignored Jira mirror)' },
+  { prefix: '.context/business/', generator: LEGACY_DISCOVERY_OUTPUT },
+  { prefix: '.context/PRD/', generator: LEGACY_DISCOVERY_OUTPUT },
+  { prefix: '.context/SRS/', generator: LEGACY_DISCOVERY_OUTPUT },
+  { prefix: '.context/infrastructure/', generator: LEGACY_DISCOVERY_OUTPUT },
+  { prefix: '.context/reports/', generator: 'skill-owned reports (test-framework-adaptation, jira-administration, regression-testing)' },
+  { prefix: '.context/regression-history/', generator: 'regression-testing' },
+  { prefix: '.context/project-config.md', generator: 'project-discovery Phase 1' },
+  { prefix: '.context/risk-assessment.md', generator: 'legacy discovery output a project may still hold, no longer written; read as input by project-context mode test-plan' },
+  // Legacy: the MTP now lives in Jira and is cached under .context/PBI/ (ADR-0007).
+  // Kept because `project-context` mode `test-plan` names it as the seed input.
+  { prefix: '.context/master-test-plan.md', generator: 'legacy local MTP, read only as the seed of the MTP Epic (project-context test-plan)' },
+];
+
+/** The only `.context/` prefix a context skill may cite without it resolving on disk. */
+const CONTEXT_CACHE_PREFIX = '.context/PBI/';
+
+function isGeneratedContextPath(path: string, strictContext: boolean): boolean {
+  if (path.startsWith(CONTEXT_CACHE_PREFIX)) { return true; }
+  if (strictContext) { return false; }
+  return CONTEXT_GENERATED_PREFIXES.some(({ prefix }) => path === prefix || path.startsWith(prefix));
+}
 
 /**
  * Relative `./file.md` citations, which `INLINE_CODE_PATH` cannot see because it
@@ -650,16 +847,22 @@ const STALE_PATH_ALLOWED = new Set<string>([
   // Gitignored generated/config artifacts (see .gitignore)
   'api/openapi.json',
   'api/.openapi-config.json',
+  // Gitignored single-use prompts `bun run up` writes (cited by the updater-parity reference)
+  '.agents/prompts/parity-plan.md',
+  '.agents/prompts/pbi-cache-migration.md',
   // Illustrative examples (docs teach a naming shape, not a real file)
   'tests/components/UsersPage.ts',
   'tests/components/AdminFixture.ts',
   'tests/data/mocks/auth/login/POST.200.json',
   'tests/data/mocks/users/POST.201.json',
   'tests/data/mocks/users/create/POST.400.json',
+  // pr-review-lead probes an EXTERNAL repo for this path (a doctrine tree the
+  // target may carry); it is never expected to exist in this checkout.
+  '.context/guidelines/tae/kata-architecture.md',
 ]);
 
 /**
- * The example artifacts the boilerplate SHIPS and `/adapt-framework` DELETES.
+ * The example artifacts the boilerplate SHIPS and `/test-framework-adaptation` DELETES.
  *
  * These exist in this repo and are gone in every adapted one, so their
  * existence on disk says nothing about whether a doc reference is stale. Left
@@ -668,10 +871,10 @@ const STALE_PATH_ALLOWED = new Set<string>([
  * `bun run skills:check` unconditionally, so the whole team stops committing
  * over a doc line that was correct all along. That is exactly how
  * `tests/components/steps/ExampleSteps.ts` (test-automation) and
- * `tests/data/fixtures/example.json` (adapt-framework) broke adapted repos.
+ * `tests/data/fixtures/example.json` (test-framework-adaptation) broke adapted repos.
  *
  * Note the irony worth preserving: several of these citations appear in
- * `adapt-framework`'s own Definition of Done, whose whole job is to assert the
+ * `test-framework-adaptation`'s own Definition of Done, whose whole job is to assert the
  * file is GONE.
  *
  * Exempt in BOTH directions — present or absent, a citation here is fine.
@@ -693,12 +896,18 @@ function isExampleArtifact(path: string): boolean {
   return EXAMPLE_ARTIFACTS.some(p => path === p || path.startsWith(`${p}/`));
 }
 
+/**
+ * `strictContext` is true for a `metadata.kind: context` skill: its `.context/`
+ * cites must resolve on disk (only the gitignored `.context/PBI/` cache is
+ * exempt). Every other skill gets the generator-output exemption.
+ */
 function checkStalePaths(
   skillSlug: string,
   skillDir: string,
   body: string,
   repoRoot: string,
   sourceFile: string,
+  strictContext = false,
 ): Violation[] {
   const result: Violation[] = [];
   const stripped = stripFencedCodeBlocks(body);
@@ -709,8 +918,10 @@ function checkStalePaths(
     // Skip absolute paths.
     if (path.startsWith('/')) { continue; }
     if (path.endsWith('/')) { continue; } // directory-shape illustration, not a file ref
+    if (path.endsWith('/...')) { continue; } // elided-tree illustration (`.context/...`), not a file ref
     if (STALE_PATH_ALLOWED.has(path)) { continue; } // gitignored artifact / intentional example
     if (isExampleArtifact(path)) { continue; } // shipped here, deleted once adapted
+    if (path.startsWith('.context/') && isGeneratedContextPath(path, strictContext)) { continue; } // written per project by a generator
     // Skill-dir-first resolution: shorthand like `scripts/foo.ts` inside a skill
     // body should resolve against the skill's own directory; fall back to repo
     // root for paths that are genuinely repo-rooted (e.g. `.agents/skills/...`).
@@ -719,7 +930,9 @@ function checkStalePaths(
     result.push({
       severity: 'ERROR',
       scope: skillSlug,
-      msg: `STALE-PATH: \`${path}\` referenced in ${sourceFile} body does not exist on disk`,
+      msg: strictContext && path.startsWith('.context/')
+        ? `STALE-PATH: \`${path}\` referenced in ${sourceFile} body does not exist on disk — a context skill cites a map that exists (generate it first, or cite the right path); only \`${CONTEXT_CACHE_PREFIX}\` is exempt`
+        : `STALE-PATH: \`${path}\` referenced in ${sourceFile} body does not exist on disk`,
     });
   }
 
@@ -778,9 +991,73 @@ function checkDuplicateTier(
   return result;
 }
 
+// --- Check 24: T4-LOADER ---
+
+const ONBOARD_SKILL_REL = '.agents/skills/agentic-qa-onboard/SKILL.md';
+const T4_LOADER_HEADING = '## Community skills installed at user level';
+/** `| \`slug\` | source | loader |`: the slug, then the last cell. */
+const T4_LOADER_ROW = /^\|\s*`([\w-]+)`\s*\|.*\|([^|]*)\|\s*$/;
+const T4_LOADER_USER_ONLY = /user-invoked only/i;
+const T4_LOADER_CITATION = /`[^`]+`/;
+
+/** Check 24: every USER_LEVEL_SKILLS slug has a loader row in the onboard table. */
+function checkT4Loaders(t4Slugs: Set<string>, repoRoot: string): Violation[] {
+  if (t4Slugs.size === 0) { return []; }
+  const onboardPath = join(repoRoot, ONBOARD_SKILL_REL);
+  if (!existsSync(onboardPath)) {
+    return [{
+      severity: 'ERROR',
+      scope: 'USER_LEVEL_SKILLS',
+      msg: `T4-LOADER: ${ONBOARD_SKILL_REL} is missing, so no user-level skill has a declared loader`,
+    }];
+  }
+
+  const loaders = new Map<string, string>();
+  let inSection = false;
+  for (const line of readFileSync(onboardPath, 'utf8').split('\n')) {
+    if (line.startsWith('## ')) {
+      inSection = line.trim() === T4_LOADER_HEADING;
+      continue;
+    }
+    if (!inSection) { continue; }
+    const m = T4_LOADER_ROW.exec(line);
+    if (m) { loaders.set(m[1], m[2].trim()); }
+  }
+
+  const result: Violation[] = [];
+  for (const slug of [...t4Slugs].sort()) {
+    const loader = loaders.get(slug);
+    if (loader === undefined) {
+      result.push({
+        severity: 'ERROR',
+        scope: slug,
+        msg: `T4-LOADER: in USER_LEVEL_SKILLS but has no row in ${ONBOARD_SKILL_REL} §"Community skills installed at user level" — add one naming its loader, or "user-invoked only"`,
+      });
+    }
+    else if (!T4_LOADER_USER_ONLY.test(loader) && !T4_LOADER_CITATION.test(loader)) {
+      result.push({
+        severity: 'ERROR',
+        scope: slug,
+        msg: `T4-LOADER: the "Loaded by / when" cell in ${ONBOARD_SKILL_REL} neither cites its loader in backticks nor says "user-invoked only"`,
+      });
+    }
+  }
+  return result;
+}
+
 // -----------------------------------------------------------------------------
 // Checks 11–12 — session-management contract
 // -----------------------------------------------------------------------------
+
+/** Check 22: a skill flagged `metadata.stage_owner: true` must carry the dispatch section AGENTS.md §3 demands. */
+function checkStageOwnerDispatch(slug: string, stageOwner: boolean, body: string): Violation[] {
+  if (!stageOwner || /^## Subagent Dispatch Strategy\b/m.test(body)) { return []; }
+  return [{
+    severity: 'ERROR',
+    scope: slug,
+    msg: 'STAGE-OWNER-DISPATCH: frontmatter declares `metadata.stage_owner: true` but the body has no `## Subagent Dispatch Strategy` section (AGENTS.md §3 workflow skill compliance)',
+  }];
+}
 
 function checkSessionBanner(slug: string, body: string): Violation[] {
   if (!(slug in SESSION_RETROFITTED_SKILLS)) { return []; }
@@ -918,6 +1195,53 @@ function gatherAllSkillMarkdown(): string[] {
     if (!rel.includes('/') && SKILL_AGGREGATE_FILES.has(rel)) { return false; }
     return true;
   });
+}
+
+/**
+ * Every committed markdown file under `.agents/` that the project authors:
+ * community skill bodies (T3 / T4 tiers, real directories or symlinks) and the
+ * generated aggregates (`REGISTRY.md`, `.agents/prompts/`) are skipped.
+ */
+function gatherVolatileTargets(communitySlugs: ReadonlySet<string>): string[] {
+  const out: string[] = [];
+  const agentsDir = join(REPO_ROOT, '.agents');
+  const walk = (dir: string): void => {
+    for (const e of readdirSync(dir)) {
+      const full = join(dir, e);
+      if (lstatSync(full).isSymbolicLink()) { continue; }
+      const st = statSync(full);
+      if (st.isDirectory()) {
+        if (dir === agentsDir && e === 'prompts') { continue; }
+        if (dir === SKILLS_DIR && communitySlugs.has(e)) { continue; }
+        walk(full);
+      }
+      else if (e.endsWith('.md')) {
+        const rel = relativePosix(SKILLS_DIR, full);
+        if (!rel.includes('/') && SKILL_AGGREGATE_FILES.has(rel)) { continue; }
+        out.push(full);
+      }
+    }
+  };
+  if (existsSync(agentsDir)) { walk(agentsDir); }
+  if (existsSync(AGENTS_MD)) { out.push(AGENTS_MD); }
+  return out.filter(f => !isVolatileExemptPath(relativePosix(REPO_ROOT, f)));
+}
+
+/** Checks 20-21: FILE-LINE + CURRENT-STATE over the prose of the files above. */
+function checkVolatileFacts(files: string[]): void {
+  for (const file of files) {
+    let text: string;
+    try { text = readFileSync(file, 'utf8'); }
+    catch { continue; }
+    const rel = relativePosix(REPO_ROOT, file);
+    const seen = new Set<string>();
+    for (const hit of scanVolatile(text, { html: false })) {
+      const key = `${hit.line}:${hit.kind}`;
+      if (seen.has(key)) { continue; }
+      seen.add(key);
+      violation(VOLATILE_SEVERITY[hit.kind], rel, `${hit.kind}: \`${hit.match}\` (line ${hit.line}) — ${volatileRemedy(hit.kind)}`);
+    }
+  }
 }
 
 interface GrepFinding { file: string, line: number, text: string, match: string }
@@ -1072,7 +1396,7 @@ function main(): void {
     // A community skill committed as a real directory in the store (downstream
     // projects commit their `bunx skills add` output) is still the tier
     // install.ts says. Classifying it T1 linted a vendor body as if the project
-    // authored it and exempted it from the AGENTS.md §5 cross-check.
+    // authored it and exempted it from the §5 skill router cross-check.
     if (t3Slugs.has(entry) || t4Slugs.has(entry)) { committedCommunity.add(entry); continue; }
 
     const content = readFileSync(skillMd, 'utf8');
@@ -1127,6 +1451,49 @@ function main(): void {
         }
       }
     }
+
+    // Check 18: every declared MCP capability is in the vocabulary.
+    const declaredCapabilities = new Set(fm.requiresCapabilities ?? []);
+    for (const capability of declaredCapabilities) {
+      if (!KNOWN_CAPABILITIES.has(capability)) {
+        violation('ERROR', entry, `CAPABILITY-VOCAB: \`metadata.requires_capabilities\` names \`${capability}\`, not in the mcp-capabilities.md §2 vocabulary (${[...KNOWN_CAPABILITIES].join(', ')})`);
+      }
+    }
+
+    // Check 19 (heuristic, WARN): a resolution tag in the SKILL.md body without
+    // the matching declaration. Body only — references/ are out of scope. A
+    // `core` skill hosts doctrine that DESCRIBES the tags; it never uses them.
+    const bodyOutsideFences = fm.kind === 'core' ? '' : stripFencedCodeBlocks(body);
+    for (const { tag, capability } of CAPABILITY_TAGS) {
+      if (bodyOutsideFences.includes(tag) && !declaredCapabilities.has(capability)) {
+        violation('WARN', entry, `CAPABILITY-UNDECLARED: body uses \`${tag}\` but \`metadata.requires_capabilities\` does not declare \`${capability}\` (declare it, or drop the mention if the skill never uses it; mcp-capabilities.md §3)`);
+      }
+    }
+
+    // Check 23: a declared write scope is a context skill's own references/.
+    if (fm.writes !== undefined) {
+      if (fm.kind !== 'context') {
+        violation('ERROR', entry, `CONTEXT-WRITES: \`metadata.writes\` is the context-kind amendment; a \`${fm.kind ?? 'kind-less'}\` skill does not declare a write scope (skill-scaffold.md §2)`);
+      }
+      else {
+        for (const target of fm.writes) {
+          const norm = target.replace(/\\/g, '/').replace(/^\.\//, '');
+          if (!(norm === 'references' || norm.startsWith('references/')) || norm.includes('..')) {
+            violation('ERROR', entry, `CONTEXT-WRITES: \`metadata.writes\` names \`${target}\`; a context skill writes only under its own \`references/\``);
+          }
+        }
+        const refresh = join(slugPath, 'references', 'refresh.md');
+        if (!existsSync(refresh)) {
+          violation('ERROR', entry, 'CONTEXT-WRITES: a context skill that declares `metadata.writes` must carry `references/refresh.md`, the procedure its write path runs');
+        }
+        const procedure = `${body}\n${existsSync(refresh) ? readFileSync(refresh, 'utf8') : ''}`;
+        for (const tag of JIRA_WRITE_TAGS) {
+          if (procedure.includes(tag)) {
+            violation('ERROR', entry, `CONTEXT-WRITES: a context skill with a write scope carries \`${tag}\`; it edits its own map, never a tracker`);
+          }
+        }
+      }
+    }
   }
 
   // Build T1 dir slug set (available after the T1 walk).
@@ -1174,11 +1541,11 @@ function main(): void {
   // ---- Checks 7–10 (new) ----
 
   // Check 7: TIER-MISMATCH
-  if (!existsSync(AGENTS_MD)) {
+  if (SKILL_ROUTER === null) {
     violation('ERROR', '[lint-skills]', 'AGENTS.md missing at repo root — TIER-MISMATCH check skipped');
   }
   else {
-    const { entries, parseError } = parseAgentsMdSkillsRegistry(AGENTS_MD);
+    const { entries, parseError } = parseAgentsMdSkillsRegistry(SKILL_ROUTER.path);
     if (parseError) {
       violation('WARN', '[lint-skills]', `TIER-MISMATCH parse failure: ${parseError}`);
     }
@@ -1189,7 +1556,9 @@ function main(): void {
 
   // Check 8: STALE-PATH — SKILL.md bodies + each skill's references/*.md
   for (const skill of t1Skills) {
-    violations.push(...checkStalePaths(skill.slug, skill.skillDir, skill.body, REPO_ROOT, 'SKILL.md'));
+    // A context skill's `.context/` cites are strict: the map must exist.
+    const strictContext = skill.frontmatter?.kind === 'context';
+    violations.push(...checkStalePaths(skill.slug, skill.skillDir, skill.body, REPO_ROOT, 'SKILL.md', strictContext));
     const refsDir = join(skill.skillDir, 'references');
     if (!existsSync(refsDir)) { continue; }
     for (const ref of readdirSync(refsDir)) {
@@ -1197,17 +1566,21 @@ function main(): void {
       let refText: string;
       try { refText = readFileSync(join(refsDir, ref), 'utf8'); }
       catch { continue; }
-      violations.push(...checkStalePaths(skill.slug, skill.skillDir, refText, REPO_ROOT, `references/${ref}`));
+      violations.push(...checkStalePaths(skill.slug, skill.skillDir, refText, REPO_ROOT, `references/${ref}`, strictContext));
     }
   }
 
   // Check 9: DUPLICATE-TIER
   violations.push(...checkDuplicateTier(t2Slugs, t3Slugs, t4Slugs));
 
+  // Check 24: T4-LOADER
+  violations.push(...checkT4Loaders(t4Slugs, REPO_ROOT));
+
   // Checks 11–14: session-management contract
   for (const skill of t1Skills) {
     violations.push(...checkSessionBanner(skill.slug, skill.body));
     violations.push(...checkSessionPhase0(skill.slug, skill.body));
+    violations.push(...checkStageOwnerDispatch(skill.slug, skill.frontmatter?.stageOwner ?? false, skill.body));
   }
   violations.push(...checkSessionScopes(REPO_ROOT));
 
@@ -1215,6 +1588,9 @@ function main(): void {
   const skillFiles = gatherAllSkillMarkdown();
   checkSkillHardcodedCfid(skillFiles);
   checkSkillLiteralTools(skillFiles);
+
+  // Checks 20-21: volatile facts (Critical Rule #17) over .agents/**/*.md + AGENTS.md.
+  checkVolatileFacts(gatherVolatileTargets(new Set([...t3Slugs, ...t4Slugs])));
 
   // ---- Report ----
   const communityNote = committedCommunity.size > 0
@@ -1228,7 +1604,7 @@ function main(): void {
     'category vocabulary (only when declared)',
     '`framework-development` exclusivity',
     'anti-leak (`/sdd-` outside Forbidden invocations)',
-    'TIER-MISMATCH (AGENTS.md §5 vs install.ts)',
+    'TIER-MISMATCH (skill router table §5 vs install.ts)',
     'STALE-PATH (inline-code path references in SKILL.md + references/*.md bodies)',
     'DUPLICATE-TIER (skill slug in multiple tier arrays)',
     'SESSION-BANNER-MISSING (retrofitted SKILL.md missing session-management banner)',
@@ -1239,6 +1615,13 @@ function main(): void {
     'KIND-MISSING (T1 / vendored T2 SKILL.md without `metadata.kind`)',
     'KIND-VOCAB (`metadata.kind` outside context / workflow / utility / core)',
     'KIND-SUFFIX (slug suffix `-context` / `-cli` / `-tool` / `-app` vs declared kind, both directions)',
+    'CAPABILITY-VOCAB (`metadata.requires_capabilities` outside web-search / library-docs / db / api-schema / diagrams)',
+    'CAPABILITY-UNDECLARED (resolution tag in SKILL.md body without the matching declaration; WARN)',
+    `FILE-LINE (path:line citation in .agents/**/*.md + AGENTS.md prose; ${VOLATILE_SEVERITY['FILE-LINE']})`,
+    `CURRENT-STATE (today / as of / dated measurement / since <version> / tool version in the same prose; ${VOLATILE_SEVERITY['CURRENT-STATE']})`,
+    'STAGE-OWNER-DISPATCH (`metadata.stage_owner: true` without a `## Subagent Dispatch Strategy` section)',
+    'CONTEXT-WRITES (`metadata.writes` outside a context skill, outside its own `references/`, without `references/refresh.md`, or next to a Jira tag)',
+    'T4-LOADER (USER_LEVEL_SKILLS slug without a loader row in the agentic-qa-onboard table)',
   ];
 
   if (violations.length === 0) {

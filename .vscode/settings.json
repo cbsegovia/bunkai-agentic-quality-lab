@@ -266,7 +266,7 @@
   "workbench.settings.editor": "json", // Preferir JSON sobre UI
   "workbench.tree.enableStickyScroll": true,
   "workbench.tree.indent": 16,
-  "workbench.startupEditor": "welcomePage",
+  "workbench.startupEditor": "none",
   // =====================
   // ? Breadcrumbs
   // =====================
@@ -335,8 +335,7 @@
     "conftest.py": "test-jsx",
     "pytest.ini": "test-py",
     "requirements.txt": "requirements",
-    ".env*": "dotenv",
-    ".envrc": "dotenv"
+    ".env*": "dotenv"
   },
   "material-icon-theme.folders.associations": {
     "utils": "tools",

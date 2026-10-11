@@ -4,7 +4,7 @@
 
 Stage 3 Reporting artifacts for in-sprint QA: ATR Test Report body, bug report template, and QA comment templates. Output written into the ticket PBI folder and mirrored to the TMS.
 
-This reference is for manual, in-sprint reporting RIGHT NOW. It does NOT cover Stage 4 formal TMS documentation or ROI scoring (see `test-documentation`), Bug Analysis *planning* variant inside an ATP (see `acceptance-test-planning.md`), or automation review artifacts (see `test-automation`).
+This reference is for manual, in-sprint reporting (Stage 3). It does NOT cover Stage 4 formal TMS documentation or ROI scoring (see `test-documentation`), Bug Analysis *planning* variant inside an ATP (see `acceptance-test-planning.md`), or automation review artifacts (see `test-automation`).
 
 > **Before publishing ATR / bug-report / QA comment bodies to Jira rich-text fields**, read `../../agentic-qa-core/references/jira-publishing-gotchas.md` — covers the two ADF conversion gotchas (`md-to-adf` mark collision + MCP batched custom-field rejection) that silently fail HTTP 400.
 > **And format for readability** per `../../acli/references/adf-authoring-style.md` — an ATR reads far better as a table (test case → status) with a `[!WARNING]` / `[!ERROR]` panel for blockers than as flat indented prose; steps-to-reproduce read best as an ordered list or table.
@@ -349,13 +349,13 @@ for each {TEST_KEY, result} in run:
   [TMS_TOOL] Update Run:
     execution: {ATR_KEY}
     test:      {TEST_KEY}
-    status:    PASS | FAIL | BLOCKED | ABORTED | TODO  # terminal-set caveat: §2.4
+    status:    PASSED | FAILED | TODO | EXECUTING  # this instance's vocabulary; BLOCKED / ABORTED only where defined: §2.4
     comment:   "{optional note, e.g. bug key if FAIL}"
 
 # Close the Execution
 [ISSUE_TRACKER_TOOL] Transition Issue:
   issue: {ATR_KEY}
-  transition: done
+  transition: {{jira.transition.test_execution.complete}}
 ```
 
 If the run was already imported from CI via `[TMS_TOOL] Import Results`, the Test Runs are already populated — only the description + Environment + Begin/End need the manual update.
@@ -401,10 +401,10 @@ Stage 3 closes the ATS and the ATP in the same pass (Modality jira-xray): ATS vi
 
 ### 2.5 Local cache (`acceptance-test-results.md`, from sync)
 
-After the ATR is in Jira, materialize the read-only cache per modality. This is a sync-emitted cache — NEVER hand-write or hand-edit it. Jira is source of truth. (The old hand-written `test-report.md` mirror is retired.)
+After the ATR is in Jira, materialize the read-only cache per modality. This is a sync-emitted cache — NEVER hand-write or hand-edit it. Jira is source of truth.
 
 - **Modality jira-native**: ATR = the Story's `{{jira.acceptance_test_results}}` field (or `## Acceptance Test Results (ATR)` fallback comment). Run `bun run jira:sync-issues get <STORY_KEY> --include-comments` → `acceptance-test-results.md` at `.../stories/STORY-<KEY>-<slug>/acceptance-test-results.md`.
-- **Modality jira-xray**: ATR = the **Test Execution** issue's `description`. Run `bun run jira:sync-issues get <ATR_KEY>` → `test-executions/ATR-<ATR_KEY>-<slug>.md` (the sync supports the Test Execution issue type). Per-TC run results (pass/fail) are NOT synced — read those via `[TMS_TOOL]` (xray-cli). Filename note: the acronym prefix comes from a conforming ladder title; a Plan or Execution whose title does not follow the grammar keeps the legacy `TESTPLAN-` / `TESTEXEC-` / `RETESTEXEC-` prefix.
+- **Modality jira-xray**: ATR = the **Test Execution** issue's `description`. Run `bun run jira:sync-issues get <ATR_KEY>` → `test-executions/ATR-<ATR_KEY>-<slug>.md` (per `work_types.test_execution.sync` in `.agents/jira-required.yaml`). Per-TC run results (pass/fail) are NOT synced — read those via `[TMS_TOOL]` (xray-cli). Filename note: the acronym prefix comes from a conforming ladder title; a Plan or Execution whose title does not follow the grammar keeps the legacy `TESTPLAN-` / `TESTEXEC-` / `RETESTEXEC-` prefix.
 
 Also append to `context.md`:
 
@@ -615,7 +615,7 @@ Record the gate outcome (hypothesis, cited fact, decision) in the ATR Observatio
 
    Resolve the `blocks` link type by slug only, create one edge, then run the mandatory direction check (confirm the Story's inward partner is the Bug under `is blocked by`) — full mechanics in `agentic-qa-core/references/traceability-linking.md` (§2 slug resolution, §4 directionality + verification, §6 never degrade a `blocks` edge to `relates` silently). Defer `--out`/`--in` flag handling to `/acli` per `[ISSUE_TRACKER_TOOL]`.
 6. PBI `context.md` updated with `Final Status` block.
-7. Nothing to commit — the ATR is canonical in Jira; the synced `acceptance-test-results.md` is a gitignored cache rebuilt by `bun run jira:sync-issues`, and `context.md` is disposable session output (see `AGENTS.md` §9).
+7. Nothing to commit — the ATR is canonical in Jira; the synced `acceptance-test-results.md` is a gitignored cache rebuilt by `bun run jira:sync-issues`, and `context.md` is disposable session output (see `.agents/instructions/agent-local-context-pbi.md`).
 8. For sprint-wide mode, only now is the sprint log appended — one entry in `.session/sprint-testing/sprint-{N}/progress.md` mirrored as one comment on the STP (Stage-3 gate; append-only on both sides).
 
 ### 5.2 Next stage routing
@@ -676,4 +676,4 @@ Slack does NOT render markdown tables, tab-separated text, or `[label](url)` pas
 2. Run: `osascript -l JavaScript cli/slack-clip.js <piece.html>` — expect `public.html=true plain-text=true`.
 3. Tell the user the clipboard is live — paste with Cmd+V before copying anything else. Multi-piece: set → paste → confirm → set the next piece.
 
-**Gotchas the helper already handles:** a trailing newline after `</table>` and blank lines between TSV rows both make Slack silently drop the table (the helper trims + emits clean single-newline rows). **Not viable alternatives** (verified): `pbcopy`/plain-TSV (raw text, no table), AppleScript `«data HTML»` (dynamic UTI Slack ignores), Slack Block Kit (no multi-column table block for channel messages).
+**Gotchas the helper already handles:** a trailing newline after `</table>` and blank lines between TSV rows both make Slack silently drop the table (the helper trims + emits clean single-newline rows). **Not viable alternatives**: `pbcopy`/plain-TSV (raw text, no table), AppleScript `«data HTML»` (dynamic UTI Slack ignores), Slack Block Kit (no multi-column table block for channel messages).

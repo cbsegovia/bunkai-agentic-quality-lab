@@ -185,3 +185,18 @@ dbhub.local.toml
 !.env.schema
 !.env.core.schema
 env.d.ts
+
+# ----- 2026-10-11 (sync) -----
+.playwright/profiles/
+.playwright-cli/
+storage-state-*.json
+!.env.provider.schema
+.context/*
+!.context/README.md
+!.context/project-config.md
+!.context/ADR/
+!.context/regression-history/
+!.context/reports/
+!.context/PBI/
+.agents/skills/skill-creator/
+.agents/skills/diagram-design/

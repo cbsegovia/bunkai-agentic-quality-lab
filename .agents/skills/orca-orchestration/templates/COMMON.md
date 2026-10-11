@@ -97,8 +97,8 @@ keep going.
 **Prohibited**, and this is not negotiable:
 
 - the harness's own agent-to-agent messaging tool — from a worktree the conductor is not in your
-  agent list, and five workers once reported to the wrong sessions this way;
-- the harness's user-question prompt — nobody is watching it (one such question waited 7.5 hours);
+  agent list, and a whole fleet once reported to the wrong sessions this way (G35);
+- the harness's user-question prompt — nobody is watching it (one such question waited for hours, G36);
 - **periodic heartbeats.** Your injected preamble asks for them; this repo forbids them, because
   each one wakes the conductor to read the word "alive". You send three things and nothing else:
   `worker_done`, `ask`, `escalation`.
@@ -131,5 +131,5 @@ fails rather than the command, so you go mute while believing you reported.
 - Project variables: `.agents/project.yaml`. Variable syntax: `.agents/README.md`.
 - Tracker catalogs: `.agents/jira-fields.json`, `.agents/jira-workflows.json`,
   `.agents/jira-required.yaml`.
-- Tests and KATA: `tests/`, `kata-manifest.json`. CLI: `cli/` (import-closed — see AGENTS.md §4.5).
+- Tests and KATA: `tests/`, `kata-manifest.json`. CLI: `cli/` (import-closed — see `.agents/instructions/agent-harnesses.md`).
 - Scripts: read `package.json` directly. Never quote a command from a doc.

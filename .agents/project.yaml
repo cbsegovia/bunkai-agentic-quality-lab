@@ -104,7 +104,30 @@ orchestration:
 # ignored. Empty by default. Read directly by the updater (not a {{VAR}} source): the
 # nested list is skipped by vars:check like git_strategy and qa.qa_epics.
 updater:
-  protected_paths: [] # e.g. [scripts/lint-vars.ts, .agents/skills/acli/SKILL.md]
+  # scripts/sync-jira-issues.ts carries a project patch: it accepts `A | B` alternatives in
+  # `jira_issue_type` so the localized type name "Historia" is synced as "Story".
+  protected_paths: [scripts/sync-jira-issues.ts] # e.g. [scripts/lint-vars.ts, .agents/skills/acli/SKILL.md]
+  # Upstream deny rules this project does NOT want appended to `.claude/settings.json`.
+  # An entry listed here, by its exact text, is left out and reported as declined. Read
+  # directly by the updater (`readDeclinedDenies` in cli/lib/updater-settings.ts), skipped
+  # by vars:check.
+  declined_denies: [] # e.g. ['Bash(env)']
+  # Upstream hook commands this project does NOT want appended to `.claude/settings.json`.
+  # A command listed here, by its exact text, is left out and reported as declined. Read
+  # directly by the updater (`readDeclinedHooks` in cli/lib/updater-settings.ts), skipped
+  # by vars:check.
+  declined_hooks: [] # e.g. ['node "$CLAUDE_PROJECT_DIR/.agents/hooks/doc-contracts.mjs"']
+
+# Where SECRET values come from. `local` (the default) = .env / .env.local.
+# A secret manager is the ADVANCED option (ADR-0010): `bun run setup` writes the
+# committed overlay .env.provider.schema (references only, never values).
+# Read directly by the installer; not a {{VAR}} source.
+secrets:
+  provider: local # local | 1password
+  onepassword:
+    vault: null # vault the op:// references point at (e.g. myproject-dev; Private on a personal plan)
+    account: null # sign-in shorthand from `op account list`; null = the CLI default account
+    auth: app # app (desktop app locally, service account in CI) | service-account (token only)
 
 backend:
   backend_repo: ../upex-bunkai-tms # Relative path to backend repository (e.g. ../my-backend)
@@ -146,6 +169,26 @@ testing:
   # `.agents/skills/sprint-testing/SKILL.md` §"Which stage creates the TCs".
   # Read as {{TC_CREATION_STAGE}}; unset or unrecognized is treated as `auto`.
   tc_creation_stage: auto
+  # Agentic browser sessions (`/playwright-cli`). Canon:
+  # .agents/skills/agentic-qa-core/references/browser-sessions.md
+  browser:
+    # Agentic Pair Testing: the human and the AI test together in the human's own
+    # running Chrome (`playwright-cli attach`), instead of the AI's own session.
+    # null  = not chosen yet: the first agentic browser session presents both modes
+    #         and saves the answer here (true | false), once.
+    # true  = pair testing is the default mode for agentic browser sessions.
+    # false = dedicated sessions by default; pair testing only on explicit request,
+    #         after one confirmation. Unattended runs never pair, whatever the value.
+    # Read directly by skills (not a {{VAR}} token).
+    pair_mode: null
+
+# Host harnesses this project uses (ADR-0012), any of: claude, opencode, codex.
+# Every compatibility gate (agents:compat:check, setup:doctor, the installer, `bun run up`)
+# checks only these; the files of a harness left out may be deleted. null = detect from
+# the files present (a harness is in use while ANY of its files exists). `bun run setup`
+# adds the agents you select (it never removes one); edit the list to drop one.
+# Read directly by cli/lib/harness-selection.ts (not a {{VAR}} token) -> skipped by vars:check.
+harnesses: [claude, opencode, codex] # e.g. [claude]
 
 qa:
   formal_blocked_gate: true # When true and the substrate exposes a `blocked` story status, FAILED stories dispatch `defect_reported` (in_test -> blocked). When false (or no `blocked` slug), the skill leaves the story in `in_test` with the linked bug — non-strict fallback. See sprint-testing/references/sprint-orchestration.md Briefing 4 Step 5.
@@ -172,6 +215,23 @@ qa:
     defect_epic:
       name: QA Defect Management # convention name; the `QA ` prefix marks a process epic, not product
       key: BK-183 # confirmed via acli
+  # How THIS project runs the IQL. Read by the shipped `iql-context` skill (the methodology
+  # index) and, through it, by every workflow skill that asks "which stages does this project
+  # run and how strict are its gates". Read directly by skills (not {{VAR}} tokens) -> skipped
+  # by vars:check.
+  methodology:
+    # Stages this project actually runs, by NAME (never by number), from the ladder in
+    # .agents/skills/agentic-qa-core/references/stage-gates.md. Remove a stage the team has
+    # consciously not adopted; its owning skill then declines the work with a stated note.
+    stages: [shift-left, planning, execution, reporting, documentation, automation, regression]
+    # Gate strictness: `strict` runs every DoD as written; `light` allows the collapsible gates
+    # named on the official methodology site, one sprint at a time, written in the STP, with a
+    # debt item per collapse. The never-collapsed gates hold in both.
+    gate_mode: strict
+    # Execution profile the agentic contract assumes: `agentic` (an agent executes the skills
+    # under the guardrails and the human decides at the declared points) or `manual` (a person
+    # runs each stage; the human gates still apply). Documentation only: no skill branches on it.
+    execution_profile: agentic
 
 # Per-environment config. Add/remove environments freely (production, dev, qa, uat, etc.).
 # Each environment must define ALL four keys: web_url, api_url, db_mcp, api_mcp.
