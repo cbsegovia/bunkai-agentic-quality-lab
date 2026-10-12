@@ -11,7 +11,15 @@
 import { expect, test } from '@TestFixture';
 
 test.describe('BK-266: Create project from dedicated route', { tag: ['@critical'] }, () => {
-  test('BK-266: should land on the new project when creating from the dedicated route', async ({ ui }) => {
+  test('BK-266: should land on the new project when creating from the dedicated route', async ({ test: fixture }) => {
+    const { ui, api } = fixture;
+    fixture.clearAuthToken();
+
+    // The ATC reads the index back, so it creates inside a workspace of its own
+    // (the shared one no longer shows new projects: 1000-row index cap).
+    const [, created] = await api.projects.createWorkspaceSuccessfully();
+    await ui.projects.selectWorkspace(created.workspace.id);
+
     const project = ui.data.createProject();
 
     const slug = await ui.projects.createProjectFromDedicatedRouteLandsOnProject(project.name);

@@ -62,6 +62,22 @@ export class ProjectsPage extends UiBase {
     await this.page.goto(this.buildUrl('/projects'));
   }
 
+  /**
+   * Point the BROWSER at a workspace. The active workspace is the httpOnly
+   * `bk_active_ws` cookie, set by this POST in the page's own cookie jar (a PAT
+   * gets 403 on this endpoint, so it goes through `page.request`). Only the
+   * per-test browser context changes; the user's server-side active workspace
+   * is untouched. Call it BEFORE `open()` or any create from the UI.
+   *
+   * @param workspaceId - workspace the Projects index and create form must use
+   */
+  @step
+  async selectWorkspace(workspaceId: string): Promise<void> {
+    const url = `${this.config.apiUrl.replace(/\/$/, '')}/v1/me/active-workspace`;
+    const response = await this.page.request.post(url, { data: { workspace_id: workspaceId } });
+    expect(response.ok(), `selecting workspace ${workspaceId} failed with HTTP ${response.status()}`).toBe(true);
+  }
+
   // ============================================
   // Helpers (Private)
   // ============================================

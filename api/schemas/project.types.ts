@@ -10,6 +10,14 @@
 import type { paths } from '@openapi';
 
 // ============================================================================
+// Endpoint Types — POST /api/v1/workspaces
+// ============================================================================
+
+type CreateWorkspacePath = paths['/api/v1/workspaces']['post'];
+export type CreateWorkspacePayload = CreateWorkspacePath['requestBody']['content']['application/json'];
+export type CreateWorkspaceResponse = CreateWorkspacePath['responses'][201]['content']['application/json'];
+
+// ============================================================================
 // Endpoint Types — POST /api/v1/workspaces/{id}/projects
 // ============================================================================
 

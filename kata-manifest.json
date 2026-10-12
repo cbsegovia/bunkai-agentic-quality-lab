@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-10-12T19:43:53.119Z",
+  "generatedAt": "2026-10-12T20:12:34.411Z",
   "components": {
     "api": [
       {
@@ -100,47 +100,47 @@
           {
             "id": "BK-604",
             "method": "listProjectsOldestFirstWithNameAndSlug",
-            "line": 89
+            "line": 105
           },
           {
             "id": "BK-605",
             "method": "listSingleProjectAtLowerBoundary",
-            "line": 127
+            "line": 143
           },
           {
             "id": "BK-606",
             "method": "activateProjectEntryNavigatesToProject",
-            "line": 142
+            "line": 158
           },
           {
             "id": "BK-607",
             "method": "showsDescriptionWhenPresentOmitsWhenAbsent",
-            "line": 156
+            "line": 172
           },
           {
             "id": "BK-609",
             "method": "createProjectFromDedicatedRouteLandsOnProject",
-            "line": 178
+            "line": 194
           },
           {
             "id": "BK-610",
             "method": "rejectsShortNameAndPreservesInput",
-            "line": 208
+            "line": 224
           },
           {
             "id": "BK-611",
             "method": "acceptsThreeCharacterBoundaryName",
-            "line": 226
+            "line": 242
           },
           {
             "id": "BK-612",
             "method": "refusesDuplicateProjectName",
-            "line": 242
+            "line": 258
           },
           {
             "id": "BK-615",
             "method": "newProjectNavControlOpensCreateRoute",
-            "line": 257
+            "line": 273
           }
         ]
       },
