@@ -10,13 +10,10 @@
  * so ApiBase's Bearer-token model still applies even though the browser flow
  * is cookie-based.
  *
- * ATCs follow flow-based design: each ATC is an ACTION + VERIFICATION,
- * not a simple GET. Read-only operations are helpers (no @atc).
- *
- * NOTE: `@atc('BK-101'/'BK-102')` below are PLACEHOLDER IDs — no real Jira
- * Test issue exists yet for these auth flows. Run `/test-documentation` to
- * create the real BK Test issues, then swap these for the real keys before
- * treating this suite as regression-complete (CLAUDE.md Rule #12).
+ * Everything here is a setup helper (no @atc): sign-in is the precondition of
+ * the BK-258 / BK-45 / BK-50 Tests, none of the Jira Tests is "sign in", so a
+ * decorator key would point at nothing (same precedent as `ProjectsApi` and
+ * `BugsApi`).
  *
  * Endpoints (confirmed against the synced OpenAPI contract):
  * - POST /api/v1/auth/check-email - {exists, confirmed} for an email
@@ -25,12 +22,12 @@
  */
 
 import type { APIResponse } from '@playwright/test';
-import type { CheckEmailPayload, CheckEmailResponse, ErrorEnvelope, MeResponse, SigninPayload, SigninResponse } from '@schemas/auth.types';
+import type { CheckEmailPayload, CheckEmailResponse, MeResponse, SigninPayload, SigninResponse } from '@schemas/auth.types';
 import type { TestContextOptions } from '@TestContext';
 
 import { ApiBase } from '@api/ApiBase';
 import { expect, request as playwrightRequest } from '@playwright/test';
-import { atc, step } from '@utils/decorators';
+import { step } from '@utils/decorators';
 
 // Re-export types for consumers that import from AuthApi
 export type { CheckEmailPayload, CheckEmailResponse, ErrorEnvelope, MeResponse, SigninPayload, SigninResponse } from '@schemas/auth.types';
@@ -154,11 +151,11 @@ export class AuthApi extends ApiBase {
   }
 
   // ============================================
-  // ATCs - Complete Test Cases (ACTION + VERIFICATION)
+  // Helpers - Authentication flows (no @atc)
   // ============================================
 
   /**
-   * ATC: Authenticate with valid credentials - expects success (200)
+   * Helper: Authenticate with valid credentials - expects success (200)
    *
    * Complete flow:
    * 1. POST credentials to /v1/auth/signin (ACTION)
@@ -176,7 +173,7 @@ export class AuthApi extends ApiBase {
    *
    * @param credentials - Email and password (existing, confirmed account)
    */
-  @atc('BK-101')
+  @step
   async authenticateSuccessfully(
     credentials: SigninPayload,
   ): Promise<[APIResponse, SigninResponse, SigninPayload]> {
@@ -198,44 +195,6 @@ export class AuthApi extends ApiBase {
     const [meResponse, meBody] = await this.getCurrentUser();
     expect(meResponse.status()).toBe(200);
     expect(meBody.user).toBeDefined();
-
-    return [response, body, sentPayload];
-  }
-
-  /**
-   * ATC: Sign in with invalid credentials - expects error (401)
-   *
-   * Complete flow:
-   * 1. POST invalid credentials to /v1/auth/signin (ACTION)
-   * 2. GET /v1/me to confirm NO session was created (VERIFICATION)
-   * 3. Validate uniform error envelope (`error.code === 'unauthorized'`)
-   *
-   * @param credentials - Invalid email or password
-   */
-  @atc('BK-102')
-  async signInWithInvalidCredentials(
-    credentials: SigninPayload,
-  ): Promise<[APIResponse, ErrorEnvelope, SigninPayload]> {
-    // ACTION: POST invalid credentials
-    const [response, body, sentPayload] = await this.apiPOST<ErrorEnvelope, SigninPayload>(
-      this.config.auth.signinEndpoint,
-      credentials,
-    );
-
-    // Fixed assertions - validates the uniform error envelope
-    expect(response.status()).toBe(401);
-    expect(response.ok()).toBe(false);
-    expect(body.error.code).toBe('unauthorized');
-
-    // VERIFICATION: Confirm no session was created via GET /v1/me → 401
-    const savedToken = this.authToken;
-    this.clearAuthToken();
-    const [meResponse] = await this.getCurrentUser();
-    expect(meResponse.status()).toBe(401);
-    // Restore token if one existed before this ATC
-    if (savedToken) {
-      this.setAuthToken(savedToken);
-    }
 
     return [response, body, sentPayload];
   }

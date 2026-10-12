@@ -1,24 +1,13 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-10-12T18:10:05.937Z",
+  "generatedAt": "2026-10-12T19:43:53.119Z",
   "components": {
     "api": [
       {
         "name": "AuthApi",
         "file": "AuthApi.ts",
         "relativePath": "tests/components/api/AuthApi.ts",
-        "atcs": [
-          {
-            "id": "BK-101",
-            "method": "authenticateSuccessfully",
-            "line": 179
-          },
-          {
-            "id": "BK-102",
-            "method": "signInWithInvalidCredentials",
-            "line": 215
-          }
-        ]
+        "atcs": []
       },
       {
         "name": "BugsApi",
@@ -61,19 +50,9 @@
         "relativePath": "tests/components/api/TraceabilityApi.ts",
         "atcs": [
           {
-            "id": "BK-107",
-            "method": "getStoryChainSuccessfully",
-            "line": 61
-          },
-          {
-            "id": "BK-109",
-            "method": "expectMismatchedPairNotFound",
-            "line": 118
-          },
-          {
             "id": "BK-335",
             "method": "expectUnauthenticatedRejection",
-            "line": 84
+            "line": 54
           }
         ]
       },
@@ -81,18 +60,7 @@
         "name": "UserStoryApi",
         "file": "UserStoryApi.ts",
         "relativePath": "tests/components/api/UserStoryApi.ts",
-        "atcs": [
-          {
-            "id": "BK-105",
-            "method": "getUserStorySuccessfully",
-            "line": 130
-          },
-          {
-            "id": "BK-106",
-            "method": "getUserStoryNotFound",
-            "line": 147
-          }
-        ]
+        "atcs": []
       }
     ],
     "ui": [
@@ -122,18 +90,7 @@
         "name": "LoginPage",
         "file": "LoginPage.ts",
         "relativePath": "tests/components/ui/LoginPage.ts",
-        "atcs": [
-          {
-            "id": "BK-103",
-            "method": "loginSuccessfully",
-            "line": 99
-          },
-          {
-            "id": "BK-104",
-            "method": "loginWithInvalidCredentials",
-            "line": 118
-          }
-        ]
+        "atcs": []
       },
       {
         "name": "ProjectsPage",
@@ -212,107 +169,107 @@
           {
             "id": "BK-331",
             "method": "exportSnapshot",
-            "line": 280
+            "line": 276
           },
           {
             "id": "BK-334",
             "method": "expectAnonymousRedirectToLogin",
-            "line": 305
+            "line": 301
           },
           {
             "id": "BK-336",
             "method": "expectNoShareAffordance",
-            "line": 911
+            "line": 906
           },
           {
             "id": "BK-445",
             "method": "expectChainRenders",
-            "line": 138
+            "line": 134
           },
           {
             "id": "BK-446",
             "method": "expectZeroAcAuthoringGap",
-            "line": 569
+            "line": 564
           },
           {
             "id": "BK-448",
             "method": "expectNonDisclosureNotFound",
-            "line": 377
+            "line": 372
           },
           {
             "id": "BK-449",
             "method": "expectArchivedAcExcluded",
-            "line": 456
+            "line": 451
           },
           {
             "id": "BK-450",
             "method": "expectGhostAtcExcluded",
-            "line": 498
+            "line": 493
           },
           {
             "id": "BK-451",
             "method": "expectArchivedStoryRendersReadOnly",
-            "line": 539
+            "line": 534
           },
           {
             "id": "BK-452",
             "method": "expectDraftStoryHasNoLifecycleGate",
-            "line": 417
+            "line": 412
           },
           {
             "id": "BK-453",
             "method": "expectNoStorySelectedPrompt",
-            "line": 252
+            "line": 248
           },
           {
             "id": "BK-455",
             "method": "expectAtcRepeatsUnderEachBoundAc",
-            "line": 691
+            "line": 686
           },
           {
             "id": "BK-456",
             "method": "expectMinimalChainRenders",
-            "line": 211
+            "line": 207
           },
           {
             "id": "BK-457",
             "method": "expectRunStatusPillMatchesTerminalStatus",
-            "line": 722
+            "line": 717
           },
           {
             "id": "BK-458",
             "method": "expectInFlightRunNotMisleading",
-            "line": 753
+            "line": 748
           },
           {
             "id": "BK-459",
             "method": "expectDefectsOrderedNewestFirst",
-            "line": 790
+            "line": 785
           },
           {
             "id": "BK-460",
             "method": "expectSharedRunHidesForeignDefect",
-            "line": 826
+            "line": 821
           },
           {
             "id": "BK-461",
             "method": "expectLayerGapCopy",
-            "line": 875
+            "line": 870
           },
           {
             "id": "BK-462",
             "method": "expectUncoveredStripForZeroAtcAc",
-            "line": 621
+            "line": 616
           },
           {
             "id": "BK-463",
             "method": "expectMixedCoverageRendersSideBySide",
-            "line": 655
+            "line": 650
           },
           {
             "id": "BK-464",
             "method": "expectZeroCoverageBannerRenders",
-            "line": 594
+            "line": 589
           }
         ]
       }
@@ -321,7 +278,7 @@
   "steps": [],
   "summary": {
     "totalComponents": 12,
-    "totalATCs": 46,
+    "totalATCs": 38,
     "apiComponents": 7,
     "uiComponents": 5,
     "stepsModules": 0

@@ -23,12 +23,8 @@
  *                       above do NOT appear on this route today, see
  *                       `expectNonDisclosureNotFound` below for detail)
  *
- * NOTE: `@atc('BK-110')` was a PLACEHOLDER ID — no real Jira Test issue
- * existed yet for this UI flow. It has been retired in favor of the real ID
- * `BK-445` (see `expectChainRenders` below). The remaining BK-45 Test issues
- * (BK-446..BK-464) are still pending the same graduation. `BK-111` was the
- * same kind of placeholder and has already been retired in favor of the
- * real ID `BK-453` (see `expectNoStorySelectedPrompt` below).
+ * Every `@atc` here carries a real BK Test issue (BK-445..BK-464 for BK-45,
+ * BK-331..BK-336 for BK-50).
  *
  * Sub-row layer selectors (confirmed via live DOM inspection against
  * staging — the component ships no `data-testid` for these 4 cells, only
@@ -351,8 +347,7 @@ export class TraceabilityPage extends UiBase {
    * exist on this build for this route):
    * - The route is server-rendered as a single document navigation that
    *   always responds HTTP 200, whether the story resolves or not - the
-   *   underlying `GET /v1/projects/{id}/traceability?story={id}` 404 (see
-   *   `TraceabilityApi.expectMismatchedPairNotFound`, `@atc('BK-109')`)
+   *   underlying `GET /v1/projects/{id}/traceability?story={id}` 404
    *   happens server-side and is never exposed as a client-observable
    *   network response, so there is nothing for `page.waitForResponse` to
    *   catch here, retry or not.
@@ -367,7 +362,7 @@ export class TraceabilityPage extends UiBase {
    *   this ATC's actual contract, is: the SAME generic not-found state
    *   renders regardless of *why* the story is unreachable, and zero chain
    *   data ever leaks into it. The distinct 404 status code + `not_found`
-   *   error code are already asserted at the API layer by BK-109.
+   *   error code are an API-layer property that this UI test does not assert.
    *
    * @param args - the Project slug and the target Story ID to probe
    * @param args.projectSlug - Project slug to build the route against

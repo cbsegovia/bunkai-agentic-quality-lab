@@ -36,8 +36,7 @@ test.describe('BK-45: Traceability non-disclosure guard', () => {
   // or any traceability testid present, only the bare app-shell 404. `qa3`
   // has exactly one reachable project, so any story ID probed against it is
   // a same-project mismatch (already covered by the nonexistent-ID case
-  // above and by `TraceabilityApi.expectMismatchedPairNotFound`,
-  // `@atc('BK-109')`), never a genuine cross-workspace case. Un-park once a
+  // above), never a genuine cross-workspace case. Un-park once a
   // second WORKSPACE with a reachable project (not just a reachable
   // account) exists on staging. See spec.md "Blockers" + BK-50 TC-BK50-09.
   test.fixme('BK-448: should return the uniform not-found state for a foreign-workspace story', async ({ ui }) => {
