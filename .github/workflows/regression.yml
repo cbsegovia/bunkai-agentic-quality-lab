@@ -256,6 +256,53 @@ jobs:
           rm -rf playwright-report
 
   # ============================================
+  # Quarantine lane (non-blocking)
+  # Runs the tests tagged @quarantine: intermittent tests parked out of the
+  # gating jobs above. They keep running and reporting so a fix is noticed,
+  # but this job can never fail the workflow, and its results are NOT merged
+  # into the Allure report (they stay out of the gating pass-rate).
+  # An empty lane passes. Policy: docs/regression-strategy.md
+  # ============================================
+  QuarantineTests:
+    name: Quarantine Lane (non-blocking)
+    needs: E2ETests
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    environment:
+      name: ${{ github.event.inputs.environment || 'staging' }}
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Dependencies
+        run: bun install
+
+      - name: Install Playwright Browsers
+        run: bun run pw:install
+
+      - name: Run Quarantined Tests on ${{ env.TEST_ENV }}
+        run: bun run test:quarantine
+
+      - name: Upload Quarantine Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quarantine-test-results
+          path: test-results/
+          retention-days: 10
+          if-no-files-found: ignore
+
+  # ============================================
   # Job 3: Build & Deploy Allure Report
   # Merges results from both test jobs
   # ============================================

@@ -73,6 +73,7 @@
     "test:integration": "bun --no-env-file scripts/launch.ts --warn playwright test --project=integration",
     "test:last-failed": "bun --no-env-file scripts/launch.ts --warn playwright test --last-failed",
     "test:report": "playwright show-report",
+    "test:quarantine": "bun --no-env-file scripts/launch.ts --warn playwright test --project=quarantine-ui --project=quarantine-api --pass-with-no-tests",
     "test:retries": "bun --no-env-file scripts/launch.ts --warn playwright test --retries=2",
     "test:smoke": "bun --no-env-file scripts/launch.ts --warn playwright test --project=smoke-ui --project=smoke-api",
     "test:sync": "bun --no-env-file scripts/launch.ts --warn bun tests/utils/jiraSync.ts",

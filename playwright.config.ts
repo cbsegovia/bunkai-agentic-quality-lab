@@ -130,6 +130,8 @@ export default defineConfig({
         storageState: config.auth.storageStatePath,
       },
       testMatch: '**/e2e/**/*.test.ts',
+      // Quarantined tests never gate a run: they run in their own lane below.
+      grepInvert: /@quarantine/,
       dependencies: ['ui-setup'],
     },
 
@@ -139,6 +141,7 @@ export default defineConfig({
     {
       name: 'integration',
       testMatch: '**/integration/**/*.test.ts',
+      grepInvert: /@quarantine/,
       dependencies: ['api-setup'],
       use: {},
     },
@@ -158,6 +161,7 @@ export default defineConfig({
     {
       name: 'smoke-ui',
       grep: /@critical/,
+      grepInvert: /@quarantine/,
       testMatch: '**/e2e/**/*.test.ts',
       dependencies: ['ui-setup'],
       use: {
@@ -168,6 +172,34 @@ export default defineConfig({
     {
       name: 'smoke-api',
       grep: /@critical/,
+      grepInvert: /@quarantine/,
+      testMatch: '**/integration/**/*.test.ts',
+      dependencies: ['api-setup'],
+      use: {},
+    },
+
+    // ============================================
+    // Quarantine lane - tests tagged @quarantine, ONE PROJECT PER SURFACE
+    // Usage: bun run test:quarantine  (runs both; an empty lane passes)
+    //
+    // A test that fails intermittently on an unchanged build is moved here
+    // instead of being switched off: it keeps running and reporting, but it
+    // is excluded from every gating project above, so it cannot turn a
+    // release red. Same surface split as smoke, for the same reason.
+    // ============================================
+    {
+      name: 'quarantine-ui',
+      grep: /@quarantine/,
+      testMatch: '**/e2e/**/*.test.ts',
+      dependencies: ['ui-setup'],
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: config.auth.storageStatePath,
+      },
+    },
+    {
+      name: 'quarantine-api',
+      grep: /@quarantine/,
       testMatch: '**/integration/**/*.test.ts',
       dependencies: ['api-setup'],
       use: {},
