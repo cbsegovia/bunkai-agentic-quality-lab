@@ -1,0 +1,13 @@
+❌ [BK-458] expectInFlightRunNotMisleading - FAIL: expect(locator).toHaveAttribute(expected) failed
+
+Locator:  locator('[data-testid="traceability-atc-row-ec9cc8ff-61d3-484d-b29a-73ac79f20c20"]')
+Expected: "running"
+Received: "aborted"
+Timeout:  10000ms
+
+Call log:
+  - Expect "toHaveAttribute" with timeout 10000ms
+  - waiting for locator('[data-testid="traceability-atc-row-ec9cc8ff-61d3-484d-b29a-73ac79f20c20"]')
+    24 × locator resolved to <div aria-hidden="false" data-status="aborted" data-date="2026-08-25" data-module="61bcf340-8ae4-40b4-b6ec-5213b9a88be5" data-testid="traceability-atc-row-ec9cc8ff-61d3-484d-b29a-73ac79f20c20" class="grid grid-cols-1 gap-2 px-4 py-3 text-sm md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] md:gap-3">…</div>
+       - unexpected value "aborted"
+
