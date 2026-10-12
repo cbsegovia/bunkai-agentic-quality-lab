@@ -134,14 +134,19 @@ export class HomePage extends UiBase {
    * ATC: The Home "Open bugs" card shows the zero state: total 0, the all-clear
    * message and no severity chips. Starts on /home (navigation is the separate
    * `open()` helper).
+   *
+   * Every locator is scoped to the "Open bugs" region: on CI the unscoped count
+   * test id resolved to a second, identical element outside the card (strict
+   * mode violation) even after the skeleton had detached.
    */
   @atc('BK-1096')
   async showsZeroStateWithoutSeverityChips(): Promise<void> {
     await this.waitForCardSettled();
 
-    await expect(this.page.locator('[data-testid="home-open-bugs-count"]')).toHaveText('0');
-    await expect(this.page.locator('[data-testid="home-open-bugs-empty"]')).toHaveText('Nothing outstanding right now.');
-    await expect(this.page.locator('[data-testid="home-open-bugs-severities"]')).toHaveCount(0);
+    const card = this.page.getByRole('region', { name: 'Open bugs' });
+    await expect(card.getByTestId('home-open-bugs-count')).toHaveText('0');
+    await expect(card.getByTestId('home-open-bugs-empty')).toHaveText('Nothing outstanding right now.');
+    await expect(card.getByTestId('home-open-bugs-severities')).toHaveCount(0);
   }
 
   // ============================================
