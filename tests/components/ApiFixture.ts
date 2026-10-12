@@ -21,6 +21,7 @@ import { AuthApi } from '@api/AuthApi';
 import { BugsApi } from '@api/BugsApi';
 import { OpenBugsApi } from '@api/OpenBugsApi';
 import { ProjectsApi } from '@api/ProjectsApi';
+import { RunsApi } from '@api/RunsApi';
 import { TraceabilityApi } from '@api/TraceabilityApi';
 import { UserStoryApi } from '@api/UserStoryApi';
 
@@ -47,6 +48,9 @@ export class ApiFixture extends ApiBase {
   /** Bugs component - BK-258 setup helpers (file a bug, advance its status) */
   readonly bugs: BugsApi;
 
+  /** Runs component - BK-45 setup helpers (start a Run, abort it) */
+  readonly runs: RunsApi;
+
   constructor(options: TestContextOptions) {
     super(options);
 
@@ -57,6 +61,7 @@ export class ApiFixture extends ApiBase {
     this.projects = new ProjectsApi(options);
     this.openBugs = new OpenBugsApi(options);
     this.bugs = new BugsApi(options);
+    this.runs = new RunsApi(options);
   }
 
   // ============================================
@@ -75,6 +80,7 @@ export class ApiFixture extends ApiBase {
     this.projects.setAuthToken(token);
     this.openBugs.setAuthToken(token);
     this.bugs.setAuthToken(token);
+    this.runs.setAuthToken(token);
   }
 
   /**
@@ -88,5 +94,6 @@ export class ApiFixture extends ApiBase {
     this.projects.clearAuthToken();
     this.openBugs.clearAuthToken();
     this.bugs.clearAuthToken();
+    this.runs.clearAuthToken();
   }
 }

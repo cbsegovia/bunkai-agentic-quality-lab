@@ -20,8 +20,10 @@
  * - "Pill - Skipped (Aborted)": run aborted before any step executed (the
  *   real mechanism the AC-01 "skipped" vocabulary maps to on this build).
  * - "Pill - Running (in-flight)": an EARLIER run finished passed, then a
- *   SECOND run was started and left open - proves BK-458's "no stale leak"
- *   half of the contract, not just a lone in-flight run.
+ *   SECOND run was started - proves BK-458's "no stale leak" half of the
+ *   contract, not just a lone in-flight run. The seeded second run was closed
+ *   by staging after ~4h, so BK-458 now starts its own run each time and
+ *   aborts it when done.
  */
 
 import { test } from '@TestFixture';
@@ -34,6 +36,11 @@ const ATC_FAIL = 'cdd29932-353f-45fa-921d-c6e8fe0b845b';
 const ATC_BLOCKED = '5599febe-f2e0-4fe8-aa17-f1e979040e6a';
 const ATC_ABORTED = '52c8f9a8-acc5-482d-b2c1-30eb3d34c3b5';
 const ATC_RUNNING = 'ec9cc8ff-61d3-484d-b29a-73ac79f20c20';
+
+// BK-458 opens a fresh run on this Test (the one behind ATC_RUNNING) in the
+// project's Staging environment.
+const TEST_RUNNING = '3a54dfca-124f-4171-b463-a75f78dfff20';
+const FIXTURE_ENVIRONMENT_ID = '505f6453-8ab9-4df1-8ffc-57f87e3d19b3';
 
 test.describe('BK-45: Traceability run-status pill matrix', () => {
   test('BK-457: should render the Pass pill for a passed run', async ({ ui }) => {
@@ -72,11 +79,34 @@ test.describe('BK-45: Traceability run-status pill matrix', () => {
     });
   });
 
-  test('BK-458: should not show a misleading verdict when the latest run is in-flight', async ({ ui }) => {
-    await ui.traceability.expectInFlightRunNotMisleading({
-      projectSlug: FIXTURE_PROJECT_SLUG,
-      userStoryId: FIXTURE_STORY_ID,
-      atcId: ATC_RUNNING,
+  test('BK-458: should not show a misleading verdict when the latest run is in-flight', async ({ test: fixture }) => {
+    const { api, ui } = fixture;
+    // Same identity the browser renders (session cookie), not the PAT.
+    fixture.clearAuthToken();
+
+    // Staging closes a Run left open for ~4h, so the in-flight run cannot be a
+    // permanent fixture: this test opens its own on top of the earlier finished
+    // run, and closes it again afterwards.
+    const [, started] = await api.runs.startRunSuccessfully({
+      testId: TEST_RUNNING,
+      environmentId: FIXTURE_ENVIRONMENT_ID,
     });
+
+    try {
+      await ui.traceability.expectInFlightRunNotMisleading({
+        projectSlug: FIXTURE_PROJECT_SLUG,
+        userStoryId: FIXTURE_STORY_ID,
+        atcId: ATC_RUNNING,
+      });
+    }
+    finally {
+      // Cleanup must never replace the in-flight test failure: warn and move on.
+      try {
+        await api.runs.abortRunSuccessfully({ runId: started.run.id, reason: 'BK-458 test cleanup' });
+      }
+      catch (error) {
+        console.warn(`[BK-458] cleanup failed, abort run ${started.run.id} manually: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
   });
 });
