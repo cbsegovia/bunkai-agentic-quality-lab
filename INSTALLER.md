@@ -128,7 +128,7 @@ Missing per-skill CLIs do not exit the installer. Install them lazily when the o
 
 | Tool     | What it buys you                                                                                                                                                                                                                               | Where the installer surfaces it                                                                                                                                                                                                                                                                                                                  |
 | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `direnv` | Auto-loads `.env` on `cd` so the bare `claude` / `opencode` binaries see MCP credentials. Without it, the `bun run claude` / `bun run opencode` wrappers (powered by `dotenv-cli`, already a project devDep) do the same thing cross-platform. | `cli/doctor.ts` (`detectDirenv`) reports `direnv.installed`, `version`, `envrc_allowed`, `hook_in_rc`. The installer offers `direnv allow` + a shell-hook nudge. **Windows users**: skip — PowerShell support is experimental (direnv 2.37+); Git Bash works but the wrapper is simpler. The installer offers the prompt anyway; decline freely. |
+| `direnv` | Retired upstream: every MCP server and each script load `.env` themselves, so secrets never need exporting into the shell. | Nothing to install. **Windows users**: skip it; open `claude` or `opencode` directly. |
 
 ### MCP credentials — 8 env vars filled into `.env`
 
@@ -241,21 +241,7 @@ Then `bun run setup:doctor --json` to confirm.
 
 ## Launching the agent after setup
 
-`bun run setup` finishes with two recommended ways to start an agent so MCP env vars (e.g. `TAVILY_API_KEY`, `ATLASSIAN_API_TOKEN`) get loaded from `.env`:
-
-| Method                                              | Platform                                                                                      | One-time setup                                                                                                                                          | Usage                                                 |
-| --------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| **`bun run claude` / `bun run opencode`** (default) | Windows, macOS, Linux                                                                         | None — `dotenv-cli` is a project devDep                                                                                                                 | `bun run claude` from the repo root                   |
-| **direnv autoload** (optional)                      | macOS, Linux, **Windows** (Git Bash recommended; PowerShell experimental, needs direnv 2.37+) | Install direnv (`brew install direnv` / `apt install direnv` / `winget install direnv`) + add hook to your shell rc, then installer runs `direnv allow` | Just `claude` or `opencode` from anywhere in the repo |
-
-### direnv hook per shell
-
-| Shell      | Line to add                               | File                                             |
-| ---------- | ----------------------------------------- | ------------------------------------------------ |
-| bash       | `eval "$(direnv hook bash)"`              | `~/.bashrc` (also works for Git Bash on Windows) |
-| zsh        | `eval "$(direnv hook zsh)"`               | `~/.zshrc`                                       |
-| fish       | `direnv hook fish \| source`              | `~/.config/fish/config.fish`                     |
-| PowerShell | `Invoke-Expression "$(direnv hook pwsh)"` | `$PROFILE` (requires direnv 2.37+, experimental) |
+Open the agent directly (`claude`, `opencode`, `codex` or the desktop app). Every MCP server loads the `.env` values it needs (e.g. `TAVILY_API_KEY`, `ATLASSIAN_API_TOKEN`) through its own loader, and exporting `.env` into the agent's own process would expose every secret to it. The old launcher wrappers in `package.json` and the direnv hook were retired upstream.
 
 `.mcp.json` (Claude Code) and `opencode.jsonc` are committed with `${VAR}` / `{env:VAR}` placeholders. Real values live in `.env` (gitignored). If a server returns 401/403 at first call, the matching env var is missing — see `CLAUDE.md` Critical Rule #11 (stop, fix `.env`, restart the agent session).
 
@@ -266,7 +252,7 @@ Pure UX, zero behavioral change. Skip without consequence.
 | Agent           | Tool                                                        | How                                                                                                                                                                                                                                                                                             |
 | --------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Claude Code** | [`ccstatusline`](https://github.com/sirmalloc/ccstatusline) | `bunx -y ccstatusline@latest` — interactive TUI to customize the Claude Code status line (model, tokens, context %, git branch, etc.). **Run in a plain terminal with no active agent session**; the configurator owns the terminal while it runs and will collide with a live Claude Code TUI. |
-| **OpenCode**    | `opencode-subagent-statusline` plugin                       | Already enabled in `opencode.jsonc` (`"plugin": [..., "opencode-subagent-statusline"]`). Shows the active subagent in the OpenCode status line. Nothing to install — `bun run opencode` picks it up.                                                                                            |
+| **OpenCode**    | `opencode-subagent-statusline` plugin                       | Already enabled in `opencode.jsonc` (`"plugin": [..., "opencode-subagent-statusline"]`). Shows the active subagent in the OpenCode status line. Nothing to install — OpenCode picks it up.                                                                                            |
 
 ### Optional UX upgrades
 
@@ -464,7 +450,7 @@ The right choice when the change is to the boilerplate's own infrastructure (KAT
 
 - **gentle-ai not detected after install** — re-run `bun run setup`. The detector probes `which gentle-ai` plus `gentle-ai version`; if either fails the installer falls back to the "skip gentle-ai" branch. Confirm the binary is on PATH (`which gentle-ai` should return a path under `/usr/local/bin/`, `~/bin/`, `~/go/bin/`, or a Homebrew prefix).
 - **MCPs returning 401/403** — the matching env var in `.env` is unset or wrong. `.mcp.json` (Claude) and `opencode.jsonc` are committed with `${VAR}` / `{env:VAR}` expansion; real values live in `.env`. Open `.env`, fill the var, and **restart the agent session** — env vars are read once at MCP-server spawn time. See `CLAUDE.md` Critical Rule #11.
-- **MCPs not loading at all** — confirm you launched the agent via `bun run claude` / `bun run opencode` (wraps with `dotenv-cli`), or that direnv autoload is active (`direnv status` shows your `.envrc` allowed). Launching `claude` directly without either path means MCP placeholders never get expanded.
+- **MCPs not loading at all** — open the agent directly (`claude` / `opencode`) and run `bun run setup:doctor` to see which `.env` keys are missing. Each MCP server loads its own keys at spawn time, so after fixing `.env` restart the agent session.
 - **`direnv allow` produced `dotenv_if_exists: command not found`** — this would mean the `.envrc` is using a newer direnv feature than your version supports. The committed `.envrc` uses portable POSIX loading (works on direnv 2.21+), so if you see this, your `.envrc` has been edited locally — restore it from `git checkout .envrc`.
 - **Skills not appearing in autocomplete** — restart Claude Code (or your agent of choice). MCP and skill configs are cached at agent startup.
 - **`/agentic-qa-onboard` does not trigger on natural language** — use the explicit slash command: `/agentic-qa-onboard`. The natural-language triggers (`onboard me to QA`, `primer vez en QA`) are advisory, not guaranteed.

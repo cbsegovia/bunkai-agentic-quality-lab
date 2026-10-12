@@ -266,7 +266,7 @@
   "workbench.settings.editor": "json", // Preferir JSON sobre UI
   "workbench.tree.enableStickyScroll": true,
   "workbench.tree.indent": 16,
-  "workbench.startupEditor": "none",
+  "workbench.startupEditor": "welcomePage",
   // =====================
   // ? Breadcrumbs
   // =====================

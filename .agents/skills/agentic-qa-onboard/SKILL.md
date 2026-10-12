@@ -170,7 +170,7 @@ Opening a deck launches the user's default browser — an outward, local action 
 
 This is the **Agentic QA Boilerplate** — a QA-only boilerplate for testing web applications with AI agents in the loop. The repo ships skills, scripts, and conventions that turn a Jira QA ticket into documented test cases and automated regression coverage through the IQL stages (eight named stages; `iql-context` explains why the process is shaped this way). It does **not** ship the application under test — that lives in a separate target repo (configured via `.agents/project.yaml`).
 
-If you cloned this repo and you don't yet have `bun run setup` complete, start there. Everything else assumes the foundation is green.
+If you cloned this repo and you don't yet have `bun setup` complete, start there. Everything else assumes the foundation is green.
 
 ---
 
@@ -196,7 +196,7 @@ The stack is intentionally locked. If your QA project needs a different stack (C
 Run the interactive installer once after cloning:
 
 ```bash
-bun run setup
+bun setup
 ```
 
 This bootstraps `.agents/`, records the agents you select in `harnesses:` (`.agents/project.yaml`) and offers to delete the files of the harnesses left out, asks where secret values live (`.env` by default, or a secret manager), wires Engram persistent memory into each selected agent (`engram setup`), configures the MCPs in `.mcp.json`, downloads Playwright browsers, installs the community skills `cli/install.ts` declares (`USER_LEVEL_SKILLS` + `PROJECT_LEVEL_SKILLS`), verifies the variables each MCP server's `.env` loader `--filter` names against your `.env`, and retires any plaintext MCP credential copy an older install left behind (the same thing `bun run harness:env` does). Full details in [`INSTALLER.md`](../../../INSTALLER.md).
@@ -207,11 +207,11 @@ After setup, fill `.env` with the credentials the rest of the workflow expects (
 
 ## New project path — from a fresh clone to a repo adapted to YOUR app
 
-`bun run setup` is phase 1 of 4, not the whole story. A brand-new project (new app under test, new Jira project) walks this ordered sequence before the first ticket. Each phase self-defends (later steps gate on earlier ones), but knowing the order saves you from discovering it by error message:
+`bun setup` is phase 1 of 4, not the whole story. A brand-new project (new app under test, new Jira project) walks this ordered sequence before the first ticket. Each phase self-defends (later steps gate on earlier ones), but knowing the order saves you from discovering it by error message:
 
 | Phase | Goal | How |
 | ----- | ---- | --- |
-| 1. Foundation | Tooling green on this machine | `bun run setup` → fill `.env` → restart the agent session → `bun run agents:setup` (project identity + environments in `.agents/project.yaml`) → `bun run pw:install` → `bun run jira:check` |
+| 1. Foundation | Tooling green on this machine | `bun setup` (it also asks the project identity + environments for `.agents/project.yaml`, downloads Chromium and syncs the Jira catalogs) → fill the `.env` values left for later → restart the agent session → `bun run setup:doctor` |
 | 2. Jira side | The tracker's catalogs mirrored locally | `bun run jira:sync-fields` + `jira:sync-workflows` + `jira:sync-link-types` (generate the `.agents/*.json` catalogs every skill reads) → `/jira-administration components` (reconcile Jira Components against the app's real modules). First-time Jira provisioning: `docs/core/setup/jira-xray.html` (docs site, `bun run docs`) |
 | 3. App under test | The framework knows and fits YOUR app | `/project-discovery` (reverse-engineers the target repo → the domain and infra maps inside `business-domain-context` and `infra-context`, plus `.context/project-config.md`) → `/project-context data` (the `business-data-context` map; mode `api` too when no OpenAPI spec is reachable) → `/test-framework-adaptation` (adapts KATA, config, CI, MCPs to the stack; its Phase 0 GATES on those maps through `bun run context:map <slug> --list` and on `project-config.md`, so the order is enforced) |
 | 4. Git strategy | Branch policy is a decision, not an inherited default | Ask **"set up our git strategy"** (git-flow-master's Strategy Setup: 4 questions → `git_strategy:` block in `.agents/project.yaml`), then optionally `bun run git:policy apply` to mirror it on GitHub. If you skip this, git-flow-master OFFERS it on your first real git action anyway (template-trap guard) — and `bun run git:policy verify` runs on every push via the pre-push hook |
@@ -339,7 +339,7 @@ The committed skills, with their triggers and purpose, are listed in `.agents/in
 
 ## Persistent memory (Engram)
 
-`bun run setup` wires **Engram** into each selected agent with the engram binary's own `engram setup <agent>`: it registers the Engram MCP server and nothing else. On Claude Code the installer then offers the Engram plugin (`claude plugin install engram@engram`), which adds the session hooks the MCP registration does not install ([`INSTALLER.md`](../../../INSTALLER.md), "What `engram setup` adds"). The boilerplate does not use gentle-ai's workflow layer; its own workflow skills (`/shift-left-testing`, `/sprint-testing`, `/test-automation`, `/test-documentation`, `/regression-testing`) cover Plan → Code → Verify natively.
+`bun setup` wires **Engram** into each selected agent with the engram binary's own `engram setup <agent>`: it registers the Engram MCP server and nothing else. On Claude Code the installer then offers the Engram plugin (`claude plugin install engram@engram`), which adds the session hooks the MCP registration does not install ([`INSTALLER.md`](../../../INSTALLER.md), "What `engram setup` adds"). The boilerplate does not use gentle-ai's workflow layer; its own workflow skills (`/shift-left-testing`, `/sprint-testing`, `/test-automation`, `/test-documentation`, `/regression-testing`) cover Plan → Code → Verify natively.
 
 Two things worth telling a new user: the agent saves memories only when it decides to (`mem_save`), and search matches keywords, not meaning, so a short keyword query finds more than a full question.
 
@@ -347,7 +347,7 @@ Full details in [`INSTALLER.md`](../../../INSTALLER.md).
 
 ## Community skills installed at user level
 
-`bun run setup` also runs `bunx skills add --global` for the cross-project skills in the `USER_LEVEL_SKILLS` array of `cli/install.ts` (the last row of the table below is NOT one of them — the orchestration binary installs it, not `setup`):
+`bun setup` also runs `bunx skills add --global` for the cross-project skills in the `USER_LEVEL_SKILLS` array of `cli/install.ts` (the last row of the table below is NOT one of them — the orchestration binary installs it, not `setup`). It asks per skill, all pre-checked; a skill you uncheck is recorded as declined and not offered again, and a non-interactive run installs every skill not declined:
 
 **Every installed skill needs a LOADER, or it should not be installed.** An install that no flow
 ever reaches is tokens spent on a capability nobody invokes — and the failure is silent, because an
@@ -362,7 +362,6 @@ loader cell neither cites its loader in backticks nor says "user-invoked only".
 | `find-skills` | vercel-labs/skills | **automatic, last resort.** `agentic-qa-core/references/skill-composition-strategy.md` §11.2: scan T1+T2, then installed T3+T4, and only if a task domain still has no match does any flow invoke this — then asks before installing |
 | `github-actions-docs` | xixu-me/skills | `/framework-development` and `/regression-testing` when EDITING or diagnosing `.github/workflows/**` (both name it; reading a workflow does not need it) |
 | `html-ppt` | lewislulu/html-ppt-skill | **user-invoked only.** `packages/decks/` is hand-authored; this is for a one-off deck outside that tree |
-| `bun` | bun.sh/docs | every flow, before a Bash call that runs `bun` (the CLI mapping in `.agents/instructions/agent-tool-resolution.md` §6.5) |
 | `mkd` | upex-galaxy/agentic-user-skills | any flow that reaches the decision threshold in `agentic-qa-core/references/decision-elicitation-doctrine.md` (>3 decisions, or one dense one) |
 | `orchestration.orchestrator_skills` | the orchestration binary | `/orca-orchestration`, ALONGSIDE it — the vendor owns the command grammar, the repo skill owns when and what |
 
@@ -376,13 +375,13 @@ Plus the project-level community skills in the `PROJECT_LEVEL_SKILLS` array of `
 
 **Joining an already-adapted project**: run through this checklist before you reach for your first ticket:
 
-- [ ] Did you run `bun run setup`?
+- [ ] Did you run `bun setup`?
 - [ ] Did you fill `.env` with what your work needs (`.env.example` documents each variable and its scope) and connect web search at harness level?
 - [ ] Did you restart the agent session after filling `.env`?
 - [ ] Did you populate `.agents/project.yaml` (run `bun run agents:setup` if not yet)?
 - [ ] Does `bun run vars:check` exit clean (0 errors)?
 - [ ] Did you run `bun run jira:check` to verify Jira credentials?
-- [ ] Did you run `bun run pw:install` to get Playwright browsers?
+- [ ] Are the Playwright browsers installed? (`bun setup` downloads Chromium; `bun run pw:install` if that step was skipped)
 - [ ] Did you run `bun run context:hydrate` to build the `.context/PBI/` Jira cache? (gitignored and regenerable — Jira stays the source of truth)
 - [ ] Does the `git_strategy:` block in `.agents/project.yaml` reflect a CHOSEN strategy (`meta.strategy_source: chosen`)? If it still says `inherited`, git-flow-master will offer Strategy Setup on your first git action — accepting takes 4 questions.
 - [ ] Does engram persistent memory respond (try `mem_context` after restart)?

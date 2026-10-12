@@ -8,26 +8,28 @@
  */
 
 import type { CompatibilityCheck } from './lib/agent-compatibility.ts';
+import type { UpdaterUi } from './lib/ui/updater-run.ts';
 import type { ProtectedWatchEntry } from './lib/updater-drift';
 import type { HarnessMigrationResult } from './lib/updater-harness-migration.ts';
 import type { GateResult, HeldBackComponent, InstructionRowInput, ParityFinding, ParityReport } from './lib/updater-parity';
 import type { PbiCacheFact } from './lib/updater-pbi';
 import type { Component, DeprecatedFile, ReportSink, RunSummary, UpdaterConfig } from './lib/updater-types';
+import type { PreflightCheck, PreflightResult } from './preflight.ts';
 import { execSync, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
+
 import * as os from 'node:os';
 import * as path from 'node:path';
-
 import pc from 'picocolors';
 import { checkAgentCompatibility, repairAgentSurfaces, SHADOWING_COMMANDS_BACKUP_DIR, SKILLS_ALIAS_DEFERRED_MARKER } from './lib/agent-compatibility.ts';
 import { applyInsertions, planInsertions, projectDelta, SCHEMA_FILE, SCHEMA_SOURCE } from './lib/agents-schema.ts';
 import { declaredHarnesses, isUnderAny, unusedHarnessPaths } from './lib/harness-selection.ts';
 import * as tui from './lib/tui';
+import { startUpdaterUi } from './lib/ui/updater-run.ts';
 import {
+  buildPairedDiff,
   cleanupTempDir,
   createBackupDir,
-  detectGitVersion,
-  gitVersionMeetsMin,
   isLocalTemplateSource,
   LAST_APPLY_FILE,
   readSyncState,
@@ -74,6 +76,7 @@ import { makePbiCacheMigrationHook } from './lib/updater-pbi';
 import { CLAUDE_SETTINGS_FILE, formatHookCommand, mergeHookGroups, mergePermissionLists, readDeclinedDenies, readDeclinedHooks } from './lib/updater-settings';
 import { parseDotEnvExampleKeys, requiredNow, VAR_MANIFEST } from './lib/variables-manifest.ts';
 import { checkoutRoots } from './lib/worktree.ts';
+import { plainMsg, runUpPreflight } from './preflight.ts';
 
 // --- CONFIGURATION ---
 // Not tied to the lock schema (`schemaVersion: 7` stays): it stamps the lock's
@@ -234,7 +237,7 @@ export const DEPRECATED_FILES: DeprecatedFile[] = [...RETIRED_COMMAND_WRAPPERS, 
 
 export const COMPONENTS: Component[] = [
   // `skills` stays its own component (not folded into `agent-compatibility` as
-  // upstream dev does): `bun run up skills --skill a,b` narrows it by subdirectory.
+  // upstream dev does): `bun sync skills --skill a,b` narrows it by subdirectory.
   { name: 'skills', type: 'directory', paths: [SKILLS_CANONICAL_DIR] },
   // The progressive-disclosure sections behind the AGENTS.md ROUTER. Synced
   // like a skill (overwrite, `.backups/` copy, an "overwritten edit" row,
@@ -345,7 +348,11 @@ export function parseArgs(args: string[]): ParsedArgs {
     }
     else if (aliases[a]) { out.commands.push(aliases[a]); }
     else if (valid.has(a)) { out.commands.push(a); }
+    // The page flags are read by cli/lib/ui/env-detect.ts.
+    else if (a === '--headless' || a === '--ui') { /* known */ }
     else if (!a.startsWith('-')) { tui.log.error(`Comando/componente desconocido: ${a}. Usa --help para ver los validos.`); process.exit(1); }
+    // An unknown flag used to be ignored, so `--dryrun` ran a REAL sync (analysis §8 #28).
+    else { tui.log.error(`Opción desconocida: ${a}. Usa --help para ver las válidas.`); process.exit(1); }
   }
   return out;
 }
@@ -355,7 +362,7 @@ const HELP_TEXT = `
 UPEX QA Boilerplate Updater v${CLI_VERSION} — Ayuda
 
 USO:
-  bun up [comando] [flags]
+  bun sync [comando] [flags]
 
 COMPONENTES: ${COMPONENTS.map(c => c.name).join(', ')}
 ATAJOS:      all, rollback, help
@@ -444,6 +451,17 @@ SIN TTY:
   asume --auto y lo avisa en una linea, en vez de quedarse esperando en el
   multi-select de la Fase 3.
 
+PAGINA LOCAL (en una terminal con pantalla):
+  La corrida se ve en una pagina local (127.0.0.1, con token) que abre sola:
+  chequeo previo, fases, cada pregunta como tarjeta con sus diffs, y el
+  reporte final. La terminal sigue mostrando el log; si ninguna pagina se
+  conecta en 10 s, las preguntas siguen en la terminal. Con --auto la pagina
+  es de solo lectura. Nunca se abre en CI, sin TTY, desde un agente ni por SSH
+  sin pantalla. Al terminar guarda una copia en .session/runs/up-*.html.
+  --headless             Sin pagina: el flujo de terminal de siempre
+  --ui                   Abre la pagina aunque las reglas digan que no (SSH con
+                         tunel, una terminal manejada por un agente)
+
 FLAGS:
   --auto                 Modo no-interactivo: sincroniza TODO el boilerplate
                          (copia archivos nuevos + sobreescribe divergencias con
@@ -478,36 +496,35 @@ ENV:
                          un consumidor.
 
 EJEMPLOS:
-  bun up                                 # Flujo interactivo (5 fases)
-  bun up skills                          # Solo agent skills
-  bun up skills --skill a,b,c            # Skills especificos
-  bun up --list                          # Listar skills disponibles
-  bun up scripts docs                    # Multiples componentes
-  bun up codex-config                    # Solo el adaptador de Codex
-  bun up --auto                          # CI mode (seguro, preserva lo tuyo)
-  bun up --force                         # Forzar todo del upstream (sin preguntar)
-  bun up --dry-run                       # Preview (con el updater nuevo si hay self-update)
-  bun up --auto --strict                 # CI: falla si queda un contrato roto
-  bun up --auto --no-gates               # Sin gates al final
-  bun up --rollback                      # Restaurar backup
+  bun sync                               # Flujo interactivo (5 fases)
+  bun sync skills                        # Solo agent skills
+  bun sync skills --skill a,b,c          # Skills especificos
+  bun sync --list                        # Listar skills disponibles
+  bun sync scripts docs                  # Multiples componentes
+  bun sync codex-config                  # Solo el adaptador de Codex
+  bun sync --auto                        # CI mode (seguro, preserva lo tuyo)
+  bun sync --force                       # Forzar todo del upstream (sin preguntar)
+  bun sync --dry-run                     # Preview (con el updater nuevo si hay self-update)
+  bun sync --auto --strict               # CI: falla si queda un contrato roto
+  bun sync --auto --no-gates             # Sin gates al final
+  bun sync --rollback                    # Restaurar backup
 `;
 
-// --- PREREQ ---
-function ensureGitVersion(): void {
-  try {
-    const v = detectGitVersion();
-    if (!gitVersionMeetsMin(v)) {
-      tui.log.error(`git ${v.raw} detectado. Se requiere git >= 2.25.0.`);
-      process.exit(2);
-    }
-  }
-  catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    tui.log.error(msg === 'GIT_NOT_FOUND' ? 'git no encontrado. Se requiere git >= 2.25.' : `git: ${msg}`);
-    process.exit(2);
-  }
+// --- RENAMED COMMAND ---
+// The updater was `bun up` until 2026-10 and is `bun sync` now. `up` stays a
+// hidden alias: a project whose package.json only has `up` runs it once, and
+// the `scripts` key sync adds `sync`. The env flag keeps the self-update
+// re-exec child, which inherits npm_lifecycle_event, from repeating the line.
+const RENAMED_NOTICE_ENV = 'UPEX_SYNC_RENAME_NOTICED';
+function noticeRenamedCommand(): void {
+  if (process.env.npm_lifecycle_event !== 'up' || process.env[RENAMED_NOTICE_ENV] === '1') { return; }
+  process.env[RENAMED_NOTICE_ENV] = '1';
+  tui.log.info('Este comando ahora se llama `bun sync`; `bun up` sigue funcionando como alias.');
 }
 
+// --- PREREQ ---
+// The git version, gh session and network checks of a run live in the preflight
+// (`cli/preflight.ts`); `--list` still needs the gh check on its own.
 async function validatePrerequisites(): Promise<void> {
   if (isLocalTemplateSource(TEMPLATE_REPO)) { return; } // plain `git clone`, no gh session involved
   try { execSync('gh --version', { stdio: 'ignore' }); }
@@ -602,7 +619,7 @@ const runFacts: RunFacts = { compat: null, envNewKeys: [], migration: null, migr
 // `.env.example` declares against what the target already has locally (`.env` +
 // local `.env.example`) and surface any upstream-added keys the target is missing.
 //
-// D3: this only PRINTS and OFFERS to run `bun run setup --variables` — it NEVER
+// D3: this only PRINTS and OFFERS to run `bun setup --variables` — it NEVER
 // auto-runs the remote push, and in non-interactive / CI mode it just prints
 // the warning (no prompt, no action).
 
@@ -662,23 +679,23 @@ async function detectEnvVarDrift(
 
   // CI / non-interactive: print only — never prompt, never touch remote (D3).
   if (nonInteractive) {
-    sink.step('Modo --auto: ejecuta `bun run setup --variables` manualmente para poblarlas.');
+    sink.step('Modo --auto: ejecuta `bun setup --variables` manualmente para poblarlas.');
     return;
   }
 
   const proceed = await sink.confirm(
-    'Ejecutar `bun run setup --variables` ahora para poblar las variables faltantes?',
+    'Ejecutar `bun setup --variables` ahora para poblar las variables faltantes?',
     false,
   );
   if (!proceed) {
-    sink.step('Omitido. Puedes ejecutar `bun run setup --variables` cuando quieras.');
+    sink.step('Omitido. Puedes ejecutar `bun setup --variables` cuando quieras.');
     return;
   }
 
-  sink.step('Lanzando `bun run setup --variables`…');
+  sink.step('Lanzando `bun setup --variables`…');
   const res = spawnSync('bun', ['run', 'setup', '--variables'], { stdio: 'inherit' });
   if (res.status !== 0) {
-    sink.warn('`bun run setup --variables` terminó con error o fue cancelado.');
+    sink.warn('`bun setup --variables` terminó con error o fue cancelado.');
   }
 }
 
@@ -881,7 +898,7 @@ export function makeAgentCompatibilityHook(
 // (`scripts/kata-manifest.ts`) and the test tree it scans (`tests/`) do travel
 // through the sync. When either changed this run, regenerate the manifest in
 // the consumer repo so the `kata:manifest:check` gate (and the pre-commit
-// staleness check) does not flag it after a routine `bun run up`. Best-effort:
+// staleness check) does not flag it after a routine `bun sync`. Best-effort:
 // a failure warns (e.g. bun missing from PATH), never aborts.
 function makeKataManifestHook(sink: ReportSink): (summary: RunSummary) => Promise<void> {
   return async (summary: RunSummary): Promise<void> => {
@@ -975,7 +992,7 @@ async function backfillProjectYamlFromSchema(
       ? `el bloque \`${gap.block}\` completo (${gap.paths.length} clave(s))`
       : `${gap.paths.length} clave(s) nueva(s) en \`${gap.block}\`: ${gap.paths.join(', ')}`;
     const proceed = await sink.confirm(
-      `Tu \`${SCHEMA_SOURCE}\` no tiene ${what}. ¿Insertarlas ahora? (insert-only — ningún valor tuyo se modifica)`,
+      `Tu \`${SCHEMA_SOURCE}\` no tiene ${what}. Insertarlas ahora? (insert-only — ningún valor tuyo se modifica)`,
       false,
     );
     if (!proceed) { continue; }
@@ -1137,7 +1154,7 @@ function makeYamlBackfillHook(
     }
 
     const proceed = await sink.confirm(
-      `Tu \`${spec.consumerRel}\` no tiene el bloque \`${spec.label}\` (estándar de defect-management). ¿Agregarlo ahora? (insert-only — tus valores existentes nunca se modifican)`,
+      `Tu \`${spec.consumerRel}\` no tiene el bloque \`${spec.label}\` (estándar de defect-management). Agregarlo ahora? (insert-only — tus valores existentes nunca se modifican)`,
       false,
     );
     if (!proceed) {
@@ -1206,7 +1223,7 @@ async function listAvailableSkills(): Promise<void> {
   process.stdout.write(`\n${pc.bold('Skills disponibles:')}\n`);
   for (const skill of skills) { process.stdout.write(`  ${pc.cyan(skill)}\n`); }
   process.stdout.write(`\n${pc.dim(`Total: ${skills.length} skill${skills.length === 1 ? '' : 's'}`)}\n`);
-  tui.log.info('Uso: bun run up skills --skill <nombre[,nombre,...]>');
+  tui.log.info('Uso: bun sync skills --skill <nombre[,nombre,...]>');
   cleanupTempDir(TEMP_DIR);
 }
 
@@ -1716,6 +1733,7 @@ function runHarnessMigration(sink: ReportSink, dryRun: boolean): HarnessMigratio
 
   tui.log.info('Migración cross-harness (Claude → Claude + OpenCode + Codex):');
   for (const line of describeHarnessMigration(plan)) { tui.log.message(`  · ${line}`); }
+  pageNote('info', ['Migración cross-harness (Claude → Claude + OpenCode + Codex):', ...describeHarnessMigration(plan).map(l => `· ${l}`)].join('\n'));
 
   // --dry-run must still SHOW this. Without it the preview would suggest the
   // project's memory is untouched while a real run promotes it to AGENTS.md
@@ -1723,6 +1741,7 @@ function runHarnessMigration(sink: ReportSink, dryRun: boolean): HarnessMigratio
   if (dryRun) {
     if (plan.blockers.length > 0) {
       tui.log.warn(`Bloqueantes que detendrían la migración:\n  - ${plan.blockers.join('\n  - ')}`);
+      pageNote('warn', `Bloqueantes que detendrían la migración: ${plan.blockers.join('; ')}`);
     }
     tui.log.message('  (--dry-run: nada de lo anterior se aplicó. La corrida real lo hace ANTES de sincronizar.)');
     runFacts.migrationPlanned = plan.needed;
@@ -1759,13 +1778,35 @@ function runHarnessMigration(sink: ReportSink, dryRun: boolean): HarnessMigratio
       sink.step(`.gitignore: añadido ${result.ignoredEntriesAdded.join(', ')}.`);
     }
     tui.log.message(`  Copia de seguridad: ${MIGRATION_BACKUP_DIR}/ (gitignored). Revísala antes de borrarla.`);
+    pageNote('info', `Copia de seguridad: ${MIGRATION_BACKUP_DIR}/ (gitignored). Revísala antes de borrarla.`);
     return result;
   }
   catch (error) {
     tui.log.error(error instanceof Error ? error.message : String(error));
-    tui.log.warn('El update se detuvo ANTES de tocar nada. Resuelve lo anterior y vuelve a correr `bun run up`.');
-    process.exit(1);
+    tui.log.warn('El update se detuvo ANTES de tocar nada. Resuelve lo anterior y vuelve a correr `bun sync`.');
+    pageNote('error', error instanceof Error ? error.message : String(error));
+    throw Object.assign(new Error('El update se detuvo ANTES de tocar nada.'), { name: 'UpdaterAbort', exitCode: 1 });
   }
+}
+
+// --- PAGE (installer-ui delivery 2) ---
+/** The page of this run, when it opened; the error handler closes it too. */
+let activeUi: UpdaterUi | null = null;
+/** A line of output that bypasses the sink (migration block), mirrored into the page. */
+function pageNote(level: 'info' | 'warn' | 'error', text: string): void {
+  activeUi?.notice(level, text);
+}
+
+/** Closes the page (summary saved, server stopped) once; safe to call with no page. */
+async function closeUi(status: 'done' | 'done-with-pending' | 'failed' | 'aborted', exit: number): Promise<void> {
+  const ui = activeUi;
+  activeUi = null;
+  if (!ui) { return; }
+  try {
+    const saved = await ui.finish(status, exit);
+    if (saved) { tui.log.info(`Resumen guardado en ${pc.cyan(saved)}`); }
+  }
+  catch { /* closing the page never changes the run's exit */ }
 }
 
 // --- SINK ---
@@ -1776,7 +1817,12 @@ function abortOnCancel<T>(v: T | symbol): T {
   return v;
 }
 
-function buildSink(): ReportSink {
+/**
+ * Today's terminal sink. With the page open it keeps printing every log line
+ * and asks a question only when no page has been connected for 10 s; `signal`
+ * then cancels the prompt the moment the page answers first (owner answer Q6).
+ */
+function buildSink(signal: () => AbortSignal | undefined = () => undefined): ReportSink {
   return {
     phase: (n, label) => tui.phaseHeader(n, label),
     subphase: (label) => {
@@ -1789,7 +1835,7 @@ function buildSink(): ReportSink {
     spinner: () => tui.spinner(),
 
     confirm: async (message, defaultValue = false) => {
-      const r = await tui.confirm({ message, initialValue: defaultValue });
+      const r = await tui.confirm({ message, initialValue: defaultValue, signal: signal() });
       return abortOnCancel<boolean>(r);
     },
 
@@ -1799,7 +1845,7 @@ function buildSink(): ReportSink {
         value: s.name,
         label: `${s.name} (${s.changedCount} cambiados${s.divergedCount > 0 ? `, ${s.divergedCount} divergente${s.divergedCount > 1 ? 's' : ''}` : ''})`,
       }));
-      const r = await tui.multiselect({ message: 'Selecciona componentes a revisar:', options, required: false });
+      const r = await tui.multiselect({ message: 'Selecciona componentes a revisar:', options, required: false, signal: signal() });
       return abortOnCancel<string[]>(r);
     },
 
@@ -1811,13 +1857,14 @@ function buildSink(): ReportSink {
         ? `, +${stats.addedTotal}/-${stats.removedTotal} líneas`
         : '';
       const r = await tui.select({
-        message: `${scope} (${stats.changedCount} archivo(s)${divergedSuffix}${locSuffix}) — ¿como proceder?`,
+        message: `${scope} (${stats.changedCount} archivo(s)${divergedSuffix}${locSuffix}) — cómo proceder?`,
         options: [
           { value: 'all', label: `aceptar todos (${stats.changedCount})` },
           { value: 'pick', label: 'elegir individualmente' },
           { value: 'skip', label: 'saltar scope completo' },
         ],
         initialValue: 'all',
+        signal: signal(),
       });
       return abortOnCancel<string>(r) as 'all' | 'pick' | 'skip';
     },
@@ -1825,7 +1872,7 @@ function buildSink(): ReportSink {
     pickFiles: async (scope, files) => {
       if (files.length === 0) { return []; }
       const options = files.map(f => ({ value: f.entry.path, label: f.label, hint: f.entry.classification }));
-      const r = await tui.multiselect({ message: `Selecciona archivos en ${scope}:`, options, required: false });
+      const r = await tui.multiselect({ message: `Selecciona archivos en ${scope}:`, options, required: false, signal: signal() });
       const selected = new Set(abortOnCancel<string[]>(r));
       return files.filter(f => selected.has(f.entry.path)).map(f => f.entry);
     },
@@ -1855,22 +1902,36 @@ function buildSink(): ReportSink {
         options: opts,
         initialValues,
         required: false,
+        signal: signal(),
       });
       // Expand atomic groups back into their individual lines for the core.
       return abortOnCancel<string[]>(r).flatMap(v => v.split('\n'));
+    },
+
+    pickPackageJsonKeys: async (file, section, keys) => {
+      if (keys.length === 0) { return []; }
+      const r = await tui.multiselect({
+        message: `${file} → ${section}: claves nuevas en upstream (se agregan sin tocar las tuyas):`,
+        options: keys.map(k => ({ value: k.value, label: k.label })),
+        initialValues: keys.filter(k => k.checked).map(k => k.value),
+        required: false,
+        signal: signal(),
+      });
+      return abortOnCancel<string[]>(r);
     },
 
     resolvePackageJsonKey: async (file, section, key, drift) => {
       const body = `=== Tu versión (local) ===\n${drift.localValue}\n\n=== Versión del boilerplate (upstream) ===\n${drift.upstreamValue}`;
       tui.note(body, `${file} → ${section}.${key}`);
       const r = await tui.select({
-        message: `${section}.${key} difiere — ¿qué hacemos?`,
+        message: `${section}.${key} difiere — qué hacemos?`,
         options: [
           { value: 'mine', label: 'Mantener la mía (predeterminado)' },
           { value: 'theirs', label: 'Actualizar a la del boilerplate' },
           { value: 'skip', label: 'Decidir después (preguntar de nuevo)' },
         ],
         initialValue: 'mine',
+        signal: signal(),
       });
       return abortOnCancel<string>(r) as 'theirs' | 'mine' | 'skip';
     },
@@ -1879,19 +1940,20 @@ function buildSink(): ReportSink {
       const body = `=== Cambios upstream ===\n${diff.templateDiff.trim() || '(sin diff)'}\n\n=== Tus cambios locales ===\n${diff.localDiff.trim() || '(sin diff)'}`;
       tui.note(body, `Divergencia en ${entry.path}`);
       const r = await tui.select({
-        message: '¿Como resolver?',
+        message: 'Cómo resolver?',
         options: [
           { value: 'skip', label: 'skip (predeterminado — preservar tu version)' },
           { value: 'theirs', label: 'theirs (descartar locales, usar upstream)' },
           { value: 'mine', label: 'mine (conservar tu version explicitamente)' },
         ],
         initialValue: 'skip',
+        signal: signal(),
       });
       return abortOnCancel<string>(r) as 'skip' | 'theirs' | 'mine';
     },
 
     confirmDelete: async (entry) => {
-      const r = await tui.confirm({ message: `¿Eliminar ${entry.path} localmente? (upstream lo borro)`, initialValue: false });
+      const r = await tui.confirm({ message: `Eliminar ${entry.path} localmente? (upstream lo borro)`, initialValue: false, signal: signal() });
       return abortOnCancel<boolean>(r);
     },
 
@@ -1971,13 +2033,14 @@ function buildSink(): ReportSink {
 export function worktreeRefusal(cwd = process.cwd()): string | null {
   const roots = checkoutRoots(cwd);
   if (roots === null || !roots.linked) { return null; }
-  return 'Este checkout es un worktree. `bun run up` guarda backups (para --rollback), marcadores y prompts '
-    + 'dentro del checkout, y en un worktree se pierden al borrarlo. Ejecuta `bun run up` en el checkout '
+  return 'Este checkout es un worktree. `bun sync` guarda backups (para --rollback), marcadores y prompts '
+    + 'dentro del checkout, y en un worktree se pierden al borrarlo. Ejecuta `bun sync` en el checkout '
     + `principal: ${roots.primaryRoot}`;
 }
 
 async function main(): Promise<void> {
   const parsed = parseArgs(process.argv.slice(2));
+  noticeRenamedCommand();
 
   if (parsed.help) { process.stdout.write(HELP_TEXT); process.exit(0); }
   const refusal = worktreeRefusal();
@@ -1989,18 +2052,64 @@ async function main(): Promise<void> {
   if (parsed.rollback) { rollbackFromBackup(); process.exit(0); }
   if (parsed.listSkills) { await listAvailableSkills(); process.exit(0); }
 
-  ensureGitVersion();
-  await validatePrerequisites();
+  // The page opens on a real terminal with a screen; CI, a pipe, an agent or
+  // SSH keep today's terminal flow, and so does `--headless`. A self-update
+  // re-exec child picks up the page its parent opened (installer-ui plan §5-§6).
+  let terminalSignal: AbortSignal | undefined;
+  const terminalSink = buildSink(() => terminalSignal);
+  try {
+    activeUi = await startUpdaterUi({
+      argv: process.argv.slice(2),
+      repoRoot: process.cwd(),
+      repoName: path.basename(process.cwd()),
+      version: CLI_VERSION,
+      terminal: terminalSink,
+      setTerminalSignal: (sig) => { terminalSignal = sig; },
+      onTerminalCancel: () => {
+        tui.cancel('Aborted by user.');
+        void closeUi('aborted', 130).then(() => process.exit(130));
+      },
+      diffFor: entry => buildPairedDiff(entry, UPSTREAM_DIR, process.cwd()),
+      groupIgnoreLines: lines => groupIgnoreLines(lines),
+      print: line => tui.log.info(line),
+    });
+  }
+  catch (err) {
+    tui.log.warn(`No se pudo abrir la página (${err instanceof Error ? err.message : String(err)}); la corrida sigue en la terminal.`);
+  }
+  const ui = activeUi;
+
+  // PREFLIGHT (installer-ui preflight.md §3): what would fail halfway, in seconds.
+  const migrationRows = (): PreflightCheck[] => {
+    const plan = planHarnessMigration();
+    if (!plan.needed && plan.blockers.length === 0) { return []; }
+    return [{ id: 'harness-migration', group: ui?.lang === 'en' ? 'This machine' : 'Esta máquina', label: ui?.lang === 'en' ? 'Cross-harness migration' : 'Migración cross-harness', value: ui?.lang === 'en' ? 'pending' : 'pendiente', state: 'info', msg: describeHarnessMigration(plan).join(' · '), neededBy: 'fetch' }];
+  };
+  const preflightOpts = { cwd: process.cwd(), templateRepo: TEMPLATE_REPO, lockFile: VERSION_FILE, lang: ui?.lang ?? 'es' as const, extra: migrationRows() };
+  const pre = await runUpPreflight(preflightOpts);
+  printPreflight(pre);
+  if (ui) {
+    if (await ui.preflight(pre, async () => runUpPreflight(preflightOpts)) === 'abort') {
+      tui.outro(ABORTED_OUTRO);
+      await closeUi('aborted', 1);
+      process.exit(1);
+    }
+  }
+  else if (pre.verdict === 'block') {
+    tui.outro(ABORTED_OUTRO);
+    process.exit(pre.checks.some(c => c.id === 'git-version' && c.state === 'block') ? 2 : 1);
+  }
 
   // No terminal on stdin (CI, a pipe, an agent's shell) and no explicit mode:
   // the Phase 3 multi-select would hang forever. Default to --auto and say so.
-  if (!parsed.auto && !parsed.force && !parsed.interactive && !process.stdin.isTTY) {
+  // A page opened with `--ui` answers the questions itself, so it keeps them.
+  if (!ui && !parsed.auto && !parsed.force && !parsed.interactive && !process.stdin.isTTY) {
     parsed.auto = true;
     tui.log.info('stdin no es una terminal: se asume --auto (pasa --interactive para conservar los prompts).');
   }
   const nonInteractive = parsed.auto || parsed.force;
 
-  // Filter components if sub-commands passed (e.g. `bun run up scripts`).
+  // Filter components if sub-commands passed (e.g. `bun sync scripts`).
   let components = COMPONENTS;
   if (parsed.commands.length > 0 && !parsed.commands.includes('all')) {
     const requested = new Set(parsed.commands);
@@ -2016,7 +2125,7 @@ async function main(): Promise<void> {
     components = await resolveSkillFilter(parsed.skills);
   }
 
-  const sink = buildSink();
+  const sink = ui?.sink ?? terminalSink;
 
   // Cross-harness migration: runs BEFORE any component is synced, on purpose.
   // A repo scaffolded when instructions lived in CLAUDE.md and skills in
@@ -2030,7 +2139,7 @@ async function main(): Promise<void> {
   if (migration?.applied && runFacts.migration === null) { runFacts.migration = migration; }
   // What the preflight just wrote is the updater's own dirt: the dirty-tree
   // guard in runUpdate (and in the self-update re-exec child) must not refuse
-  // a tree that was clean before `bun run up` started.
+  // a tree that was clean before `bun sync` started.
   const updaterOwnedPaths = migration ? harnessMigrationTouchedPaths(migration) : [];
   // Lock cursor BEFORE this run advances it: the parity prompt names both shas.
   const priorLockSha = readLock(process.cwd()).templateCommit;
@@ -2053,7 +2162,7 @@ async function main(): Promise<void> {
     // component is synced wholesale and imports picocolors / yaml / boxen /
     // cli-table3 / figures / @clack/prompts / @inquirer/prompts at RUNTIME,
     // all declared only there — syncing the code without the package leaves
-    // `bun run up` crashing on import. `lint-staged` is here because
+    // `bun sync` crashing on import. `lint-staged` is here because
     // `.husky/pre-commit` shells out to `bunx lint-staged`, which reads its
     // config from this file.
     packageJsonSpecs: [
@@ -2111,7 +2220,7 @@ async function main(): Promise<void> {
     // without this every consumer project inherits our proposals and backlogs as
     // if they were framework documentation. Mirrored in TEMPLATE_EXCLUDES
     // (packages/create-agentic-qa/src/prepare.ts) — the scaffold prunes them on
-    // first install and this keeps `bun run up` from putting them back.
+    // first install and this keeps `bun sync` from putting them back.
     //
     // `.context/ADR/` needs no entry here: `.context` is not a synced component,
     // so ADRs only ever travel through the scaffold tarball, which prunes them.
@@ -2128,6 +2237,8 @@ async function main(): Promise<void> {
     promptFile: PARITY_PROMPT_PATH,
     hooks: {
       skillsResolver: resolveTemplateSkills,
+      // The page survives the re-exec: the child binds the same port and token.
+      ...(ui ? { beforeReexec: ui.beforeReexec } : {}),
       // afterApply runs while the upstream clone still sits in UPSTREAM_DIR
       // (cleanup happens after). On dry-run only the read-only pieces run (env
       // keys, the parity table), nothing is regenerated or saved. Each hook is
@@ -2198,7 +2309,8 @@ async function main(): Promise<void> {
     },
   };
 
-  tui.intro(tui.headline(`UPEX QA Boilerplate Updater v${CLI_VERSION}`));
+  // A re-exec child continues the parent's run: its intro is already on screen.
+  if (process.env.UPEX_UPDATER_REEXEC !== '1') { tui.intro(tui.headline(`UPEX QA Boilerplate Updater v${CLI_VERSION}`)); }
 
   const summary = await runUpdate(cfg, sink, {
     auto: parsed.auto,
@@ -2215,18 +2327,57 @@ async function main(): Promise<void> {
   const verdict = runVerdict({ aborted, dryRun: parsed.dryRun, strict: parsed.strict }, runFacts.parity?.findings ?? []);
   if (verdict.reason) { tui.log.error(verdict.reason); }
   tui.outro(verdict.outro);
+  if (ui) {
+    const findings = runFacts.parity?.findings ?? [];
+    if (!aborted) {
+      ui.report({
+        dryRun: parsed.dryRun,
+        auto: nonInteractive,
+        aborted,
+        applied: summary.applied.length,
+        skipped: summary.skipped.length,
+        failed: summary.failed.map(f => ({ path: f.entry.path, reason: f.reason })),
+        upstreamSha: summary.newHeadSha,
+        surfaces: runFacts.parity?.report.surfaces ?? [],
+        findings,
+        prompt: runFacts.parity?.report.prompt,
+        promptPath: !parsed.dryRun && (summary.promptSaved || runFacts.promptKept) ? PARITY_PROMPT_PATH : null,
+        commit: !parsed.dryRun && summary.newHeadSha && (summary.applied.length > 0 || (summary.lastApplyPaths ?? 0) > 0) ? suggestCommitMessage(summary) : null,
+        extraNext: runFacts.aliasDeferred ? [{ title: 'Alias de skills pendiente', text: ALIAS_DEFERRED_NEXT_STEP }] : [],
+      });
+    }
+    const pending = (nonInteractive && summary.skipped.length > 0) || findings.length > 0;
+    await closeUi(aborted ? 'aborted' : verdict.exitCode !== 0 ? 'failed' : pending ? 'done-with-pending' : 'done', verdict.exitCode);
+  }
   if (verdict.exitCode !== 0) { process.exit(verdict.exitCode); }
+}
+
+/** Terminal rows of the preflight: nothing when all is clear (today's output), every warn and block otherwise. */
+function printPreflight(pre: PreflightResult): void {
+  for (const c of pre.checks) {
+    if (c.state !== 'warn' && c.state !== 'block') { continue; }
+    const text = `${c.label}${c.value && c.value !== '-' ? ` (${c.value})` : ''}: ${plainMsg(c.msg ?? '')}`;
+    if (c.state === 'block') { tui.log.error(text); }
+    else { tui.log.warn(text); }
+  }
 }
 
 // Guarded so tests can import COMPONENTS and the pure helpers above
 // (extractIndentedYamlBlock, insertBlockAtEndOfSection) without kicking off a sync.
 if (import.meta.main) {
-  main().catch((err: unknown) => {
+  main().catch(async (err: unknown) => {
     if (err instanceof Error && err.name === 'ExitPromptError') {
       tui.cancel('Aborted by user.');
+      await closeUi('aborted', 130);
       process.exit(130);
     }
+    if (err instanceof Error && err.name === 'UpdaterAbort') {
+      await closeUi('aborted', 1);
+      process.exit(1);
+    }
     tui.log.error(err instanceof Error ? err.message : String(err));
+    activeUi?.notice('error', err instanceof Error ? err.message : String(err));
+    await closeUi('failed', 1);
     process.exit(1);
   });
 }

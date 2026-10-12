@@ -59,9 +59,11 @@
       </p>
       <p>
         Hay una segunda modalidad para proyectos sin licencia de Xray, llamada
-        <em>jira-native</em>. En ella el ATP y el ATR viven en custom fields de la historia y los
-        test cases son un work type <code>Test</code> propio. Esta guía cubre la modalidad con Xray;
-        la configuración de jira-native está en
+        <em>jira-native</em>. En ella el ATP y el ATR son work types nativos
+        <code>Test Plan</code> y <code>Test Execution</code> (el custom field de la historia es el
+        fallback cuando la instancia no los tiene) y los test cases son un work type
+        <code>Test</code> propio. Esta guía cubre la modalidad con Xray; la configuración de
+        jira-native está en
         <code>.agents/skills/test-documentation/references/jira-setup.md</code> (sección 3).
       </p>
 
@@ -127,7 +129,7 @@
           carpetas del Test Repository y para los components.
         </li>
         <li>
-          El repo instalado con <code>bun run setup</code> y un <code>.env</code> creado a partir de
+          El repo instalado con <code>bun setup</code> y un <code>.env</code> creado a partir de
           <code>.env.example</code>.
         </li>
       </ul>
@@ -406,7 +408,7 @@
             <tr>
               <th>Variable</th>
               <th>Para qué</th>
-              <th>¿Obligatoria?</th>
+              <th>Obligatoria?</th>
             </tr>
           </thead>
           <tbody>
@@ -481,7 +483,7 @@
       <p>
         La lista completa y comentada está en <code>.env.example</code>. Las que tienen destino
         <code>github</code> en <code>cli/lib/variables-manifest.ts</code> también son secrets de CI:
-        las sube a GitHub Actions <code>bun run setup --variables</code>.
+        las sube a GitHub Actions <code>bun setup --variables</code>.
       </p>
 
       <h2 id="catalogos">Catálogos locales y <code>jira:check</code></h2>
